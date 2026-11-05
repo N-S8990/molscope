@@ -1,0 +1,3 @@
+# Documentation moved
+
+See [PART 6 INGESTION VALIDATION](archive/PART_6_INGESTION_VALIDATION.md).

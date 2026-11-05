@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "project_id": "my_study",
+  "systems": [{
+    "system_id": "system_01",
+    "topology": "inputs/topology.pdb",
+    "ensembles": [{
+      "ensemble_id": "ensemble_01",
+      "replicas": [{"replica_id": "replica_01", "trajectory": "inputs/trajectory.dcd"}]
+    }]
+  }],
+  "analysis": {"plugins": []}
+}

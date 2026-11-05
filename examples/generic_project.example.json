@@ -1,0 +1,74 @@
+{
+  "schema_version": "1",
+  "project_id": "my_md_study",
+  "systems": [
+    {
+      "system_id": "system_01",
+      "topology": "path/to/topology.pdb",
+      "metadata": {
+        "description": "User-defined molecular system"
+      },
+      "simulation_protocol": {
+        "engine": "openmm",
+        "forcefield_files": ["user-selected-forcefield.xml"],
+        "nonbonded_method": "NoCutoff",
+        "constraints": "HBonds",
+        "temperature_kelvin": 300.0,
+        "friction_per_picosecond": 1.0,
+        "timestep_femtoseconds": 1.0,
+        "minimization_max_iterations": 0,
+        "equilibration_steps": 1000,
+        "production_steps": 200000,
+        "report_interval_steps": 1000,
+        "platform": "CPU",
+        "seed": 2026,
+        "ph": 7.0,
+        "keep_heterogens": false
+      },
+      "ensembles": [
+        {
+          "ensemble_id": "ensemble_01",
+          "metadata": {
+            "condition": "user-defined"
+          },
+          "replicas": [
+            {
+              "replica_id": "replica_01",
+              "trajectory": "path/to/trajectory.dcd",
+              "metadata": {
+                "seed": "user-recorded"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "labels": [
+    {
+      "label_id": "experimental_condition",
+      "label_type": "categorical",
+      "level": "trajectory",
+      "source": "researcher_provided",
+      "description": "Independent experimental or protocol condition, assigned once per trajectory.",
+      "assignments": {
+        "system_01:ensemble_01:replica_01": "user-defined"
+      }
+    }
+  ],
+  "prediction_tasks": [
+    {
+      "task_id": "condition_classification",
+      "task_type": "classification",
+      "target_label_id": "experimental_condition",
+      "description": "Run only when condition is a scientifically valid predictive target."
+    }
+  ],
+  "analysis": {
+    "generic_feature_parameters": {
+      "max_frames": 500,
+      "frame_stride": 5
+    },
+    "plugins": ["protein.salt_bridges", "structural.sasa"]
+  }
+}

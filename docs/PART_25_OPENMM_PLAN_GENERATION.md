@@ -1,0 +1,3 @@
+# Documentation moved
+
+See [PART 25 OPENMM PLAN GENERATION](archive/PART_25_OPENMM_PLAN_GENERATION.md).

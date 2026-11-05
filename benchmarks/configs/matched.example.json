@@ -1,0 +1,50 @@
+{
+  "benchmark_id": "matched_platform_comparison",
+  "description": "Template for a matched-input MolScope, mdxplain, and baseline comparison.",
+  "shared_protocol": {
+    "trajectory_preprocessing": "same topology, frame stride, frame range, and imaging policy",
+    "feature_scope": "matched conventional distances, contacts, torsions, SASA, and secondary structure where both tools support them",
+    "resource_measurement": "wall-clock seconds and peak resident memory on the same host configuration",
+    "state_protocol": "declare embedding, clustering, seed, and state-count policy before either run"
+  },
+  "input_manifest": "results/shared_manifest.csv",
+  "identity_columns": ["system_id", "ensemble_id", "replica_id", "trajectory_id"],
+  "metrics": [
+    {"metric_id": "runtime_seconds", "unit": "seconds", "higher_is_better": false},
+    {"metric_id": "peak_memory_mb", "unit": "MB", "higher_is_better": false},
+    {"metric_id": "state_separation_silhouette", "unit": "unitless", "higher_is_better": true}
+  ],
+  "methods": [
+    {
+      "method_id": "molscope",
+      "label": "MolScope target-free discovery",
+      "kind": "molscope",
+      "input_manifest": "results/shared_manifest.csv",
+      "results_csv": "results/molscope_benchmark_metrics.csv",
+      "protocol": {
+        "runner": "python -m molscope.run_project",
+        "ranking_outputs": ["state_explanatory_feature_ranking", "sam_mfp_candidates"]
+      }
+    },
+    {
+      "method_id": "mdxplain",
+      "label": "mdxplain matched protocol",
+      "kind": "mdxplain",
+      "checkout_path": "/path/to/mdxplain",
+      "input_manifest": "results/shared_manifest.csv",
+      "results_csv": null,
+      "protocol": {
+        "runner": "researcher-executed mdxplain PipelineManager",
+        "normalization": "export metrics into the declared result CSV schema"
+      }
+    },
+    {
+      "method_id": "pca_kmeans_baseline",
+      "label": "PCA + k-means baseline",
+      "kind": "baseline",
+      "input_manifest": "results/shared_manifest.csv",
+      "results_csv": null,
+      "protocol": {"runner": "researcher-declared baseline script"}
+    }
+  ]
+}

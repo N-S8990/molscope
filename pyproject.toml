@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "molscope"
+version = "0.1.0"
+description = "System-aware molecular-dynamics feature discovery and prioritization"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "MolScope contributors"}]
+dependencies = [
+  "numpy>=1.24", "pandas>=2", "scipy>=1.10", "scikit-learn>=1.3",
+  "matplotlib>=3.7", "MDAnalysis>=2.5", "networkx>=3", "tqdm>=4.65"
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "freesasa>=2.2,<3"]
+dssp = ["MDAnalysis>=2.8"]
+simulation = ["openmm>=8.1", "pdbfixer @ git+https://github.com/openmm/pdbfixer.git"]
+parquet = ["pyarrow>=14"]
+
+[project.scripts]
+molscope = "molscope.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["molscope*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

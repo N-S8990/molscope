@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.benchmark-env/
+.venv/
+.conda/
+.conda-pkgs/
+.cleanup-archive/
+*.egg-info/
+build/
+dist/
+results/
+cache/
+studies/
+examples/local_*.json
