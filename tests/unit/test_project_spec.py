@@ -47,6 +47,24 @@ class ProjectSpecTests(unittest.TestCase):
             self.assertEqual(project_summary(project)["missing_paths"], [])
             self.assertEqual(project.analysis.plugins, ("protein.salt_bridges",))
             self.assertEqual(project.analysis.generic_feature_parameters["max_frames"], 5)
+            self.assertEqual(_target_column(project, None), "metadata_condition")
+
+    def test_unique_declared_label_runs_without_prediction_task(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self._write_project(Path(temporary))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["prediction_tasks"] = []
+            payload["labels"] = [{
+                "label_id": "condition", "label_type": "categorical", "level": "trajectory",
+                "source": "researcher_provided",
+                "assignments": {"arbitrary-system:reference-condition:run-01": "reference"},
+            }]
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            self.assertEqual(_target_column(load_project_spec(path), None), "metadata_label_condition")
+            payload["labels"].append({**payload["labels"][0], "label_id": "second_condition"})
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Multiple complete categorical labels"):
+                _target_column(load_project_spec(path), None)
 
     def test_duplicate_system_ids_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
