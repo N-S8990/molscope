@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from molscope.core.contracts import ApplicabilityStatus, FeatureAssessment, FeatureProvenance
+from molscope.features.base import _chain_or_segment_id
 from molscope.profiling.system import ComponentSelection, SystemProfile, discover_component_selections, profile_system
 
 
@@ -112,10 +113,7 @@ def _lag_one_autocorrelation(values: list[float]) -> float:
 
 
 def _residue_feature_id(residue) -> str:
-    atoms = residue.atoms
-    chain_ids = {value.strip() for value in atoms.chainIDs if value and value.strip()}
-    segids = {value.strip() for value in atoms.segids if value and value.strip()}
-    scope = f"chain_{next(iter(chain_ids))}" if len(chain_ids) == 1 else f"segment_{next(iter(segids))}" if len(segids) == 1 else "unlabeled"
+    scope = _chain_or_segment_id(residue.atoms)
     return f"{_safe_id(scope)}__{_safe_id(residue.resname)}_{residue.resid}"
 
 
