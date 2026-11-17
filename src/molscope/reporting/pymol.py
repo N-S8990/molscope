@@ -67,7 +67,7 @@ def extract_residue_scores(
         res_matches = _RESIDUE_PATTERN.findall(name)
         if res_matches:
             for _, _, resid_str in res_matches:
-                res = int(residid_str) if 'residid_str' in locals() else int(resid_str)
+                res = int(resid_str)
                 residue_scores[res] = max(residue_scores.get(res, 0.0), abs(val))
 
     return residue_scores
