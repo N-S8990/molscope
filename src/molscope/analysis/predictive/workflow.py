@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import warnings
+
 import numpy as np
 import pandas as pd
+from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, roc_auc_score
@@ -20,6 +23,7 @@ class MLWorkflowConfig:
     random_state: int = 42
     rf_estimators: int = 300
     bootstrap_samples: int = 1_000
+    include_baseline_dummy: bool = False
 
     def __post_init__(self):
         if self.n_splits < 2:
@@ -55,18 +59,22 @@ def validate_ml_inputs(features: pd.DataFrame, manifest: pd.DataFrame, target_co
         )
 
 
-def _models(config: MLWorkflowConfig) -> dict[str, Pipeline | RandomForestClassifier]:
-    return {
+def _models(config: MLWorkflowConfig) -> dict[str, Any]:
+    models: dict[str, Any] = {
         "logistic_regression": Pipeline([
             ("scale", StandardScaler()),
-            ("model", LogisticRegression(max_iter=2_000, random_state=config.random_state)),
+            ("model", LogisticRegression(max_iter=2_000, random_state=config.random_state, class_weight="balanced")),
         ]),
         "random_forest": RandomForestClassifier(
             n_estimators=config.rf_estimators,
             random_state=config.random_state,
             n_jobs=-1,
+            class_weight="balanced",
         ),
     }
+    if getattr(config, "include_baseline_dummy", False):
+        models["dummy"] = DummyClassifier(strategy="most_frequent")
+    return models
 
 
 def _trajectory_mean_accuracy(y_true: np.ndarray, y_pred: np.ndarray, groups: np.ndarray) -> float:
@@ -76,8 +84,38 @@ def _trajectory_mean_accuracy(y_true: np.ndarray, y_pred: np.ndarray, groups: np
     ]))
 
 
-def _evaluate(model, x_train, y_train, x_test, y_test, groups_test) -> dict[str, float]:
-    model.fit(x_train, y_train)
+def _trajectory_sample_weights(groups: np.ndarray) -> np.ndarray:
+    """Give each independent trajectory equal total influence during fitting."""
+    counts = pd.Series(groups).value_counts()
+    weights = np.asarray([1.0 / counts[group] for group in groups], dtype=float)
+    return weights / weights.mean()
+
+
+def _trajectory_vote_metrics(y_true: np.ndarray, y_pred: np.ndarray, groups: np.ndarray) -> dict[str, float]:
+    """Score one majority-vote prediction per held-out trajectory."""
+    rows = []
+    for group in pd.unique(groups):
+        mask = groups == group
+        true_values = pd.unique(y_true[mask])
+        if len(true_values) != 1:
+            raise ValueError(f"Held-out trajectory {group!r} has more than one target value.")
+        predictions = pd.Series(y_pred[mask]).value_counts()
+        # ``value_counts`` preserves first-occurrence order for equal counts,
+        # making ties deterministic without looking at the target.
+        rows.append((true_values[0], predictions.index[0]))
+    trajectory_true, trajectory_pred = map(np.asarray, zip(*rows, strict=True))
+    return {
+        "Trajectory_Vote_Accuracy": float(accuracy_score(trajectory_true, trajectory_pred)),
+        "Trajectory_Vote_Balanced_Accuracy": float(balanced_accuracy_score(trajectory_true, trajectory_pred)),
+    }
+
+
+def _evaluate(model, x_train, y_train, groups_train, x_test, y_test, groups_test) -> tuple[dict[str, float], np.ndarray, np.ndarray | None]:
+    weights = _trajectory_sample_weights(groups_train)
+    if isinstance(model, Pipeline):
+        model.fit(x_train, y_train, model__sample_weight=weights)
+    else:
+        model.fit(x_train, y_train, sample_weight=weights)
     predictions = model.predict(x_test)
     probabilities = model.predict_proba(x_test)[:, 1] if len(np.unique(y_train)) == 2 else None
     result = {
@@ -86,14 +124,16 @@ def _evaluate(model, x_train, y_train, x_test, y_test, groups_test) -> dict[str,
         "Balanced_Accuracy": float(balanced_accuracy_score(y_test, predictions)),
         "F1": float(f1_score(y_test, predictions, average="weighted", zero_division=0)),
     }
+    result.update(_trajectory_vote_metrics(y_test, predictions, groups_test))
     if probabilities is not None and len(np.unique(y_test)) == 2:
         result["ROC_AUC"] = float(roc_auc_score(y_test, probabilities))
     else:
         result["ROC_AUC"] = np.nan
-    return result
+    return result, predictions, probabilities
 
 
-def _bootstrap_ci(values: np.ndarray, samples: int, random_state: int) -> tuple[float, float]:
+def _fold_resampling_interval(values: np.ndarray, samples: int, random_state: int) -> tuple[float, float]:
+    """Describe variation across CV folds; this is not a confidence interval."""
     if len(values) < 2:
         return (np.nan, np.nan)
     rng = np.random.default_rng(random_state)
@@ -130,6 +170,13 @@ def run_grouped_ml_workflow(
     # Stratify independent trajectories, so long trajectories cannot dominate
     # class balancing or leave a fold without a class.
     trajectories = metadata.drop_duplicates("trajectory_id").reset_index(drop=True)
+    if len(trajectories) < 10:
+        warnings.warn(
+            f"Insufficient independent samples: only {len(trajectories)} independent trajectories available across classes. "
+            "Feature importance and generalization estimates carry high variance in trajectory-grouped cross-validation.",
+            UserWarning,
+            stacklevel=2,
+        )
     splitter = StratifiedKFold(n_splits=config.n_splits, shuffle=True, random_state=config.random_state)
     splits = []
     assignment_rows = []
@@ -142,23 +189,39 @@ def run_grouped_ml_workflow(
         for _, row in trajectories.iloc[test_groups].iterrows():
             assignment_rows.append({"trajectory_id": row["trajectory_id"], "Target": row[target_column], "Test_Fold": fold})
     metric_rows = []
+    prediction_rows = []
     baseline_rows = []
     for model_name, model in _models(config).items():
         for fold, (train_index, test_index) in enumerate(splits, start=1):
-            metrics = _evaluate(model, x.iloc[train_index], y[train_index], x.iloc[test_index], y[test_index], groups[test_index])
+            metrics, predictions, probabilities = _evaluate(
+                model, x.iloc[train_index], y[train_index], groups[train_index],
+                x.iloc[test_index], y[test_index], groups[test_index],
+            )
             metric_rows.append({"Model": model_name, "Fold": fold, "Train_Trajectories": len(pd.unique(groups[train_index])), "Test_Trajectories": len(pd.unique(groups[test_index])), **metrics})
+            for position, row_index in enumerate(test_index):
+                prediction_rows.append({
+                    "Model": model_name, "Fold": fold, "Frame_Row": int(row_index),
+                    "trajectory_id": groups[row_index], "Target": y[row_index],
+                    "Predicted_Target": predictions[position],
+                    "Positive_Class_Probability": float(probabilities[position]) if probabilities is not None else np.nan,
+                })
             if model_name == "random_forest":
                 baseline_rows.append({"Fold": fold, **metrics})
     fold_metrics = pd.DataFrame(metric_rows)
     summary_rows = []
     for model_name, subset in fold_metrics.groupby("Model", sort=False):
         record = {"Model": model_name, "Outer_Folds": len(subset)}
-        for metric in ["Frame_Accuracy", "Trajectory_Mean_Accuracy", "Balanced_Accuracy", "F1", "ROC_AUC"]:
+        for metric in ["Frame_Accuracy", "Trajectory_Mean_Accuracy", "Trajectory_Vote_Accuracy", "Trajectory_Vote_Balanced_Accuracy", "Balanced_Accuracy", "F1", "ROC_AUC"]:
             values = subset[metric].dropna().to_numpy(dtype=float)
             record[f"{metric}_Mean"] = float(np.mean(values))
             record[f"{metric}_Std"] = float(np.std(values, ddof=1)) if len(values) > 1 else np.nan
         summary_rows.append(record)
-    outputs = {"outer_fold_metrics": fold_metrics, "model_summary": pd.DataFrame(summary_rows), "fold_assignments": pd.DataFrame(assignment_rows)}
+    outputs = {
+        "outer_fold_metrics": fold_metrics,
+        "model_summary": pd.DataFrame(summary_rows),
+        "fold_assignments": pd.DataFrame(assignment_rows),
+        "out_of_fold_predictions": pd.DataFrame(prediction_rows),
+    }
     if not run_lofo:
         return outputs
 
@@ -173,14 +236,17 @@ def run_grouped_ml_workflow(
         if not keep:
             continue
         for fold, (train_index, test_index) in enumerate(splits, start=1):
-            metrics = _evaluate(
+            metrics, _, _ = _evaluate(
                 _models(config)["random_forest"],
-                x.loc[train_index, keep], y[train_index], x.loc[test_index, keep], y[test_index], groups[test_index],
+                x.loc[train_index, keep], y[train_index], groups[train_index],
+                x.loc[test_index, keep], y[test_index], groups[test_index],
             )
             lofo_rows.append({
                 "Feature_Group": feature_group,
                 "Feature_Count": len(removed_features),
                 "Fold": fold,
+                "Baseline_Trajectory_Mean_Accuracy": float(baseline.loc[fold, "Trajectory_Mean_Accuracy"]),
+                "Without_Group_Trajectory_Mean_Accuracy": metrics["Trajectory_Mean_Accuracy"],
                 "Trajectory_Mean_Accuracy_Drop": float(baseline.loc[fold, "Trajectory_Mean_Accuracy"] - metrics["Trajectory_Mean_Accuracy"]),
                 "Frame_Accuracy_Drop": float(baseline.loc[fold, "Frame_Accuracy"] - metrics["Frame_Accuracy"]),
                 "Balanced_Accuracy_Drop": float(baseline.loc[fold, "Balanced_Accuracy"] - metrics["Balanced_Accuracy"]),
@@ -195,14 +261,17 @@ def run_grouped_ml_workflow(
     summary = []
     for feature_group, subset in lofo_folds.groupby("Feature_Group", sort=False):
         drops = subset["Trajectory_Mean_Accuracy_Drop"].to_numpy(dtype=float)
-        low, high = _bootstrap_ci(drops, config.bootstrap_samples, config.random_state)
+        low, high = _fold_resampling_interval(drops, config.bootstrap_samples, config.random_state)
         summary.append({
             "Feature_Group": feature_group,
             "Feature_Count": int(subset["Feature_Count"].iloc[0]),
             "Outer_Folds": len(subset),
+            "Baseline_Trajectory_Mean_Accuracy": float(np.mean(subset["Baseline_Trajectory_Mean_Accuracy"])),
+            "Without_Group_Trajectory_Mean_Accuracy": float(np.mean(subset["Without_Group_Trajectory_Mean_Accuracy"])),
             "Trajectory_Mean_Accuracy_Drop_Mean": float(np.mean(drops)),
-            "Trajectory_Mean_Accuracy_Drop_CI_Lower": low,
-            "Trajectory_Mean_Accuracy_Drop_CI_Upper": high,
+            "Trajectory_Mean_Accuracy_Gain_Without_Group": float(max(0.0, -np.mean(drops))),
+            "Trajectory_Mean_Accuracy_Drop_Fold_Resample_Lower": low,
+            "Trajectory_Mean_Accuracy_Drop_Fold_Resample_Upper": high,
             "Frame_Accuracy_Drop_Mean": float(np.mean(subset["Frame_Accuracy_Drop"])),
             "Mean_Rank": float(np.mean(subset["Fold_Rank"])),
             "Rank_Std": float(np.std(subset["Fold_Rank"], ddof=1)) if len(subset) > 1 else np.nan,
@@ -218,5 +287,7 @@ def run_grouped_ml_workflow(
     predictive_ranking.insert(0, "Ranking_Evidence", "trajectory_grouped_LOFO_random_forest")
     predictive_ranking.insert(1, "Importance_Endpoint", "trajectory_mean_accuracy_drop")
     predictive_ranking.insert(2, "Interpretation", "predictive_association_not_causality")
+    predictive_ranking.insert(3, "Accuracy_Change_Definition", "baseline_minus_without_group;positive_drop_means_group_helped_prediction")
+    predictive_ranking.insert(4, "Uncertainty_Qualification", "fold_resampling_is_descriptive_not_independent_replica_confidence_interval")
     outputs["predictive_feature_ranking"] = predictive_ranking
     return outputs
