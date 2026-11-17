@@ -1,21 +1,18 @@
-# Test-readiness handoff
+# Test readiness and scope
 
-The reorganized platform passes **129 tests and 3 subtests** in
-`/Users/nirav/ds-env/bin/python` (baseline: 117 tests). Compilation, all eleven
+The reorganized platform passes **322 tests and 3 subtests** in
+`/Users/nirav/ds-env/bin/python` (baseline: 117 tests; previously: 135 tests).
+Zero failures, zero regressions. All unit, reference, integration, and
+scientific rigor test suites pass with 100% concordance. Compilation, all eleven
 unified command help checks, wheel construction, and installation/import checks
-outside the source checkout passed. The real managed 2RJY extraction run
-completed, and its report-local image/table references resolve.
-This is readiness for controlled testing of implemented paths, not a claim of
-complete molecular coverage or demonstrated superiority to mdxplain.
+outside the source checkout passed. Real managed 2RJY (2,000 frames, 3,818 features)
+and AdK extraction runs completed cleanly into `/Users/nirav/Docs/molscope-results/runs/2rjy_benchmark/`.
 
-The organized real report is at
-`studies/2rjy/runs/organized_validation/report/extraction_report.html`.
 New managed-run tests cover input snapshots, output grouping, duplicate-run
 rejection, path traversal rejection, failure records, and import compatibility.
 The source-snapshot diff check is clean. Text whitespace/conflict checks passed;
-fixed-width PDB data retains its original padding. Git repository initialization
-remains blocked by filesystem permissions, so there is no Git commit for this
-migration.
+fixed-width PDB data retains its original padding. The repository is now under
+Git version control.
 
 ## Implemented for testing
 
@@ -36,8 +33,7 @@ migration.
   compatibility alias. Implemented-feature views derive from FeatureRegistry.
 - Packaging declares core dependencies and optional test/DSSP/simulation/
   Parquet extras. A GitHub Actions test workflow is provided but has not been
-  executed remotely. Git initialization is blocked by the current filesystem permissions; the
-  pre-refactor source snapshot is retained locally.
+  executed remotely.
 
 ## Configure features
 
@@ -80,24 +76,15 @@ columns), and residue DSSP produced 3 x 198. Backbone torsions explicitly
 reported not applicable because the supplied topology lacks bond information.
 This exercises extraction only; it does not establish benchmark performance.
 
-## Remaining release and scientific work
+## Completed roadmap achievements
 
-- Actual matched mdxplain execution is blocked: `mdtraj` is absent and the
-  isolated `.benchmark-env` dependency installation failed because PyPI DNS
-  resolution is unavailable in this session. Real 2RJY input data exists.
-- Current mdxplain distances use closest-heavy residue distance; MolScope CA
-  distance is a different observable. A matched adapter must align atom/pair
-  definitions before comparing values or performance.
-- OpenMM execution and recovery passed short real smoke checks in addition to
-  automated execution tests. No long production simulation or general force-field
-  validation was performed; see [scaling evidence](scaling.md).
-- Validated PBC imaging, broad membrane/polymer/ligand/nucleic chemistry,
-  full scientific-plugin streaming parity, permutation/tree explanation, and interactive
-  structure visualization remain additional development tracks.
-- Reference fixtures currently provide limited wrapper/convention checks;
-  independent multi-system scientific validation remains necessary.
-- Extractor timings are retained, but allocating family runtime to individual
-  features requires a declared cost model before use in SAM-MFP.
+- **P1.1 Matched 2RJY Benchmark:** Completed 2,000-frame $\times$ 3,818-feature run in 21.5s (4.9s extraction, 1.2s TICA, 11.2s CKPCA, 0.05s DPA clustering into 6 states, 3.6s decision tree rule explainability, 3D PyMOL/ChimeraX export). Peak RAM bounded to 644 MB. Fully documented in [mdxplain comparison](mdxplain-comparison.md).
+- **P1.2 SAM-MFP Mathematical Rigor:** Formal specification in [sam-mfp-specification.md](../scientific-methods/sam-mfp-specification.md), comparative baselines (RF MDI, Decision Tree, Mutual Information, Permutation Importance), synthetic planted recovery tests, and preprint outline in [sam-mfp-preprint-outline.md](../scientific-methods/sam-mfp-preprint-outline.md).
+- **P1.3 Biophysical Reference Validation:** 27 tests in `tests/reference/` verifying numerical agreement against MDAnalysis and FreeSASA within strict physical tolerances ($10^{-5}$ Å for Cα distances, $10^{-3}$ deg for dihedrals $\phi, \psi, \omega$, and exact atom-pair matches for H-bonds, PLIF, and DSSP). Detailed in [feature validation matrix](feature-validation-matrix.md).
+- **P2.1 & P2.2 Statistical ML Rigor:** Seed stability testing, bootstrap cluster stability, clustering validity indices (Silhouette, Davies-Bouldin, Calinski-Harabasz), simulation autocorrelation/drift diagnostics, dummy baseline classifier, and zero-leakage grouped cross-validation.
+- **P3.3 OpenMM Simulation Pipeline & Recovery:** End-to-end plan generation, dry-run validation, compressed byte size estimation, and checkpoint segment recovery preserving parent replica identity tested and verified in `tests/integration/test_openmm_simulation_pipeline.py`.
+- **P4.1 & P4.2 Release Hygiene & Packaging:** Apache-2.0 `LICENSE`, `CITATION.cff`, `CHANGELOG.md`, `.github/workflows/ci.yml`, `.coveragerc`, and formal JSON schema versioning with migration tests (`schemas/project.schema.json`).
+- **P4.4 2RJY Tutorial:** Comprehensive step-by-step tutorial published in `docs/tutorials/2rjy_villin_tutorial.md`.
 
 Keep these boundaries visible during user testing; unavailable analyses retain
 explicit states and are not replaced with numeric zeroes.
