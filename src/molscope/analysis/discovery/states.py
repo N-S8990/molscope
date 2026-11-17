@@ -157,12 +157,22 @@ def discover_conformational_states(
     }
 
 
-def rank_state_explanatory_features(features: pd.DataFrame, assignments: pd.DataFrame) -> pd.DataFrame:
+def rank_state_explanatory_features(
+    features: pd.DataFrame,
+    assignments: pd.DataFrame,
+    *,
+    allow_inapplicable: bool = True,
+) -> pd.DataFrame:
     """Describe measured feature separation among *derived* candidate states.
 
     This is deliberately an effect-size table, not supervised validation: state
     labels were inferred from the same trajectory data, frames are correlated,
     and the output cannot establish physical states, mechanisms, or causality.
+
+    When ``allow_inapplicable`` is True, features with missing, non-finite, or
+    inapplicable observations propagate transparently into the returned table
+    with explicit ``Ranking_Status`` and ``Status_Reason`` fields without silent
+    imputation or zero-filling.
     """
     if len(features) != len(assignments):
         raise ValueError("Feature matrix and state assignments must have the same row count.")
@@ -172,14 +182,34 @@ def rank_state_explanatory_features(features: pd.DataFrame, assignments: pd.Data
     if states.isna().any() or states.nunique() < 2:
         raise ValueError("State-explanatory ranking requires at least two assigned states.")
     numeric = features.apply(pd.to_numeric, errors="coerce")
-    invalid = numeric.columns[~np.isfinite(numeric.to_numpy(dtype=float)).all(axis=0)].tolist()
-    if invalid:
+    invalid = set(numeric.columns[~np.isfinite(numeric.to_numpy(dtype=float)).all(axis=0)])
+    if invalid and not allow_inapplicable:
+        sorted_invalid = sorted(invalid)
         raise ValueError(
             "State-explanatory ranking does not impute invalid features; "
-            f"invalid columns include: {invalid[:8]}"
+            f"invalid columns include: {sorted_invalid[:8]}"
         )
     rows = []
+    inapplicable_rows = []
     for feature in numeric:
+        if feature in invalid:
+            values = numeric[feature]
+            valid_frac = float(np.isfinite(values.to_numpy(dtype=float)).mean())
+            inapplicable_rows.append({
+                "Feature": feature,
+                "State_Explained_Variance_Eta_Squared": np.nan,
+                "Max_State_Mean_Difference": np.nan,
+                "Candidate_State_Count": int(states.nunique()),
+                "Ranking_Evidence": "inapplicable_or_missing_observations",
+                "Interpretation": "excluded_from_ranking_without_silent_imputation",
+                "Ranking_Status": "inapplicable" if valid_frac == 0.0 else "missing_values",
+                "Status_Reason": (
+                    f"Feature contains non-finite or missing values (valid fraction {valid_frac:.1%}); "
+                    "excluded from ranking without silent imputation."
+                ),
+            })
+            continue
+
         values = numeric[feature]
         overall = float(values.mean())
         grouped = values.groupby(states, sort=True)
@@ -194,12 +224,26 @@ def rank_state_explanatory_features(features: pd.DataFrame, assignments: pd.Data
             "Candidate_State_Count": int(states.nunique()),
             "Ranking_Evidence": "derived_state_descriptive_effect_size",
             "Interpretation": "descriptive_candidate_state_separation_not_predictive_or_causal",
+            "Ranking_Status": "ranked",
+            "Status_Reason": "Complete finite observations across all frames.",
         })
-    ranked = pd.DataFrame(rows).sort_values(
-        ["State_Explained_Variance_Eta_Squared", "Max_State_Mean_Difference", "Feature"],
-        ascending=[False, False, True],
-    ).reset_index(drop=True)
-    ranked["Rank"] = ranked.index + 1
+    ranked_valid = pd.DataFrame(rows)
+    if not ranked_valid.empty:
+        ranked_valid = ranked_valid.sort_values(
+            ["State_Explained_Variance_Eta_Squared", "Max_State_Mean_Difference", "Feature"],
+            ascending=[False, False, True],
+        ).reset_index(drop=True)
+        ranked_valid["Rank"] = ranked_valid.index + 1
+    else:
+        ranked_valid["Rank"] = pd.Series(dtype=float)
+
+    if inapplicable_rows:
+        inapplicable_df = pd.DataFrame(inapplicable_rows).sort_values("Feature").reset_index(drop=True)
+        inapplicable_df["Rank"] = np.nan
+        ranked = pd.concat([ranked_valid, inapplicable_df], ignore_index=True)
+    else:
+        ranked = ranked_valid
+
     return ranked
 
 
