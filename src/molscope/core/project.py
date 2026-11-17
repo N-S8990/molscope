@@ -50,6 +50,7 @@ class AnalysisSpec:
     generic_feature_parameters: dict[str, Any] = field(default_factory=dict)
     plugins: tuple[str, ...] = ()
     plugin_parameters: dict[str, dict[str, Any]] = field(default_factory=dict)
+    imaging: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -465,7 +466,15 @@ def load_project_spec(path: str | Path) -> ProjectSpec:
     from molscope.features.plugins import get_plugin
     for plugin_id in plugins:
         get_plugin(plugin_id, plugin_parameters.get(plugin_id))
-    analysis = AnalysisSpec(generic_feature_parameters=generic_parameters, plugins=plugins, plugin_parameters=plugin_parameters)
+    raw_imaging = raw_analysis.get("imaging", {})
+    if not isinstance(raw_imaging, dict):
+        raise ValueError("analysis.imaging must be an object specifying imaging policy.")
+    analysis = AnalysisSpec(
+        generic_feature_parameters=generic_parameters,
+        plugins=plugins,
+        plugin_parameters=plugin_parameters,
+        imaging=raw_imaging,
+    )
     return ProjectSpec(project_id=project_id, systems=tuple(systems), labels=tuple(labels), prediction_tasks=tuple(tasks), analysis=analysis, source_path=source)
 
 
