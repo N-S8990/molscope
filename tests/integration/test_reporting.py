@@ -5,9 +5,20 @@ from pathlib import Path
 import pandas as pd
 
 from molscope.reporting import ReportInputs, build_research_report, render_report_figures
+from molscope.reporting.research import _largest_absolute_accuracy_changes, write_result_guide
 
 
 class ReportingTests(unittest.TestCase):
+    def test_predictive_figures_select_both_directions_of_accuracy_change(self):
+        ranking = pd.DataFrame({
+            "Feature_Group": [f"positive_{index}" for index in range(16)] + ["negative_large"],
+            "Trajectory_Mean_Accuracy_Drop_Mean": [0.01 + index * 0.005 for index in range(16)] + [-0.25],
+        })
+        selected = _largest_absolute_accuracy_changes(ranking)
+        self.assertEqual(len(selected), 15)
+        self.assertIn("negative_large", selected["Feature_Group"].tolist())
+        self.assertNotIn("positive_0", selected["Feature_Group"].tolist())
+
     def test_report_separates_target_free_and_predictive_evidence(self):
         markdown, summary = build_research_report(ReportInputs(
             quality=pd.DataFrame({"Resolution": ["frame", "unavailable"]}),
@@ -61,6 +72,32 @@ class ReportingTests(unittest.TestCase):
             )
             self.assertEqual(set(paths), {"predictive_feature_ranking.png", "state_explanatory_feature_ranking.png"})
             self.assertTrue((Path(temporary) / "predictive_feature_ranking.png").is_file())
+
+    def test_writes_density_correlation_accuracy_and_reader_guide(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            features = pd.DataFrame({"a": [0, 1, 2, 3], "b": [3, 2, 1, 0], "c": [0, 1, 0, 1]})
+            salience = pd.DataFrame({"Feature": ["a", "b", "c"], "PCA_Salience": [0.8, 0.7, 0.2]})
+            coordinates = pd.DataFrame({"PC1": [0, 1, 2, 3], "PC2": [0, 1, 0, 1], "PC3": [1, 0, 1, 0]})
+            predictive = pd.DataFrame({"Feature_Group": ["a"], "Trajectory_Mean_Accuracy_Drop_Mean": [0.2]})
+            summary = pd.DataFrame({"Model": ["random_forest"], "Trajectory_Mean_Accuracy_Mean": [0.8]})
+            paths = render_report_figures(None, None, temporary, features=features,
+                                          representation_salience=salience,
+                                          representation_coordinates=coordinates,
+                                          predictive_ranking=predictive,
+                                          supervised_model_summary=summary)
+            expected = {"feature_correlation_map.png", "pca_density_2d.png",
+                        "pca_density_3d.png", "predictive_accuracy_gain_drop.png"}
+            self.assertTrue(expected.issubset(paths))
+            write_result_guide(temporary, {"sam_mfp_candidates": pd.DataFrame({
+                "Feature": ["a", "b"], "SAM_MFP_Pareto_Front": [True, False],
+            }), "supervised_predictive_feature_ranking": predictive}, paths)
+            self.assertTrue((Path(temporary) / "feature_guide.csv").is_file())
+            feature_guide = pd.read_csv(Path(temporary) / "feature_guide.csv")
+            self.assertIn("Evidence_Summary", feature_guide.columns)
+            self.assertIn("Suggested_Next_Check", feature_guide.columns)
+            guide = (Path(temporary) / "START_HERE.md").read_text()
+            self.assertIn("pca_density_3d.png", guide)
+            self.assertIn("not physical x/y/z", guide)
 
 
 if __name__ == "__main__":
