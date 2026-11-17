@@ -1,3 +1,0 @@
-# Documentation moved
-
-See [PART 8 INTERACTION VALIDATION](archive/PART_8_INTERACTION_VALIDATION.md).
