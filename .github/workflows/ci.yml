@@ -1,0 +1,58 @@
+name: MolScope CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include-extras: [true]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+            include-extras: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies (base + extras)
+        if: ${{ matrix.include-extras }}
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install ".[test,dssp,parquet]"
+          python -m pip install coverage pytest-cov
+
+      - name: Install dependencies (minimal base)
+        if: ${{ !matrix.include-extras }}
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install ".[test]"
+          python -m pip install coverage pytest-cov
+
+      - name: Byte-compile verification
+        run: |
+          python -m compileall -q src/molscope
+
+      - name: Run test suite with coverage
+        run: |
+          python -m pytest --cov=molscope --cov-report=xml --cov-report=term-missing tests/
+
+      - name: Check code formatting and diff sanity
+        run: |
+          git diff --check
