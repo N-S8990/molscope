@@ -30,10 +30,26 @@ class MLWorkflowTests(unittest.TestCase):
         importance = outputs["lofo_importance"].set_index("Feature_Group")
         ranking = outputs["predictive_feature_ranking"].set_index("Feature_Group")
         self.assertEqual(len(outputs["outer_fold_metrics"]), 6)
+        self.assertEqual(len(outputs["out_of_fold_predictions"]), len(self.features) * 2)
+        self.assertTrue(outputs["out_of_fold_predictions"].groupby("Model")["Frame_Row"].nunique().eq(len(self.features)).all())
+        self.assertIn("Trajectory_Vote_Balanced_Accuracy", outputs["outer_fold_metrics"].columns)
         self.assertIn("Trajectory_Mean_Accuracy_Drop_Mean", importance.columns)
         self.assertGreaterEqual(importance.loc["signal_group", "Positive_Drop_Frequency"], importance.loc["noise_group", "Positive_Drop_Frequency"])
         self.assertEqual(ranking.loc["signal_group", "Ranking_Evidence"], "trajectory_grouped_LOFO_random_forest")
         self.assertEqual(ranking.loc["signal_group", "Interpretation"], "predictive_association_not_causality")
+        folds = outputs["lofo_fold_drops"]
+        np.testing.assert_allclose(
+            folds["Trajectory_Mean_Accuracy_Drop"],
+            folds["Baseline_Trajectory_Mean_Accuracy"] - folds["Without_Group_Trajectory_Mean_Accuracy"],
+        )
+        np.testing.assert_allclose(
+            importance["Trajectory_Mean_Accuracy_Drop_Mean"],
+            importance["Baseline_Trajectory_Mean_Accuracy"] - importance["Without_Group_Trajectory_Mean_Accuracy"],
+        )
+        np.testing.assert_allclose(
+            importance["Trajectory_Mean_Accuracy_Gain_Without_Group"],
+            np.maximum(0.0, -importance["Trajectory_Mean_Accuracy_Drop_Mean"]),
+        )
 
     def test_unequal_trajectory_lengths_preserve_classes_and_groups(self):
         indices = []
