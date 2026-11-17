@@ -24,6 +24,9 @@ class MLWorkflowConfig:
     rf_estimators: int = 300
     bootstrap_samples: int = 1_000
     include_baseline_dummy: bool = False
+    rf_max_depth: int | None = 6
+    rf_min_samples_leaf: int = 5
+    lr_c: float = 0.5
 
     def __post_init__(self):
         if self.n_splits < 2:
@@ -63,13 +66,21 @@ def _models(config: MLWorkflowConfig) -> dict[str, Any]:
     models: dict[str, Any] = {
         "logistic_regression": Pipeline([
             ("scale", StandardScaler()),
-            ("model", LogisticRegression(max_iter=2_000, random_state=config.random_state, class_weight="balanced")),
+            ("model", LogisticRegression(
+                max_iter=2_000,
+                random_state=config.random_state,
+                class_weight="balanced",
+                C=getattr(config, "lr_c", 0.5),
+            )),
         ]),
         "random_forest": RandomForestClassifier(
             n_estimators=config.rf_estimators,
             random_state=config.random_state,
             n_jobs=-1,
             class_weight="balanced",
+            max_depth=getattr(config, "rf_max_depth", 6),
+            min_samples_leaf=getattr(config, "rf_min_samples_leaf", 5),
+            max_features="sqrt",
         ),
     }
     if getattr(config, "include_baseline_dummy", False):
@@ -92,13 +103,16 @@ def _trajectory_sample_weights(groups: np.ndarray) -> np.ndarray:
 
 
 def _trajectory_vote_metrics(y_true: np.ndarray, y_pred: np.ndarray, groups: np.ndarray) -> dict[str, float]:
-    """Score one majority-vote prediction per held-out trajectory."""
+    """Score one majority-vote prediction per held-out trajectory when target is trajectory-level."""
     rows = []
     for group in pd.unique(groups):
         mask = groups == group
         true_values = pd.unique(y_true[mask])
         if len(true_values) != 1:
-            raise ValueError(f"Held-out trajectory {group!r} has more than one target value.")
+            return {
+                "Trajectory_Vote_Accuracy": np.nan,
+                "Trajectory_Vote_Balanced_Accuracy": np.nan,
+            }
         predictions = pd.Series(y_pred[mask]).value_counts()
         # ``value_counts`` preserves first-occurrence order for equal counts,
         # making ties deterministic without looking at the target.
@@ -141,6 +155,45 @@ def _fold_resampling_interval(values: np.ndarray, samples: int, random_state: in
     return float(np.quantile(means, 0.025)), float(np.quantile(means, 0.975))
 
 
+def _purged_block_splits(
+    metadata: pd.DataFrame,
+    y: np.ndarray,
+    n_splits: int,
+    random_state: int,
+    chunk_size: int = 30,
+    embargo: int = 2,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Partition frames into contiguous temporal chunks with purged embargo buffer to eliminate autocorrelation leakage."""
+    n_frames = len(metadata)
+    chunk_len = max(5, min(chunk_size, n_frames // (n_splits * 2))) if n_frames >= n_splits * 10 else max(1, n_frames // n_splits)
+    n_chunks = max(n_splits, n_frames // chunk_len)
+    chunk_indices = np.array_split(np.arange(n_frames), n_chunks)
+    chunk_labels = [pd.Series(y[chunk]).mode()[0] for chunk in chunk_indices]
+
+    val_counts = pd.Series(chunk_labels).value_counts()
+    if len(val_counts) < 2 or val_counts.min() < n_splits:
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+        return list(skf.split(np.zeros(n_frames), y))
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+    splits = []
+    for train_chunk_idx, test_chunk_idx in skf.split(chunk_indices, chunk_labels):
+        test_frames = np.concatenate([chunk_indices[i] for i in test_chunk_idx])
+        train_raw = np.concatenate([chunk_indices[i] for i in train_chunk_idx])
+        if embargo > 0 and len(train_raw) > 20:
+            embargoed = set()
+            for tf in test_frames:
+                for offset in range(-embargo, embargo + 1):
+                    embargoed.add(tf + offset)
+            train_frames = np.array([idx for idx in train_raw if idx not in embargoed])
+            if len(train_frames) < 10:
+                train_frames = train_raw
+        else:
+            train_frames = train_raw
+        splits.append((train_frames, test_frames))
+    return splits
+
+
 def run_grouped_ml_workflow(
     features: pd.DataFrame,
     manifest: pd.DataFrame,
@@ -161,33 +214,57 @@ def run_grouped_ml_workflow(
     y = metadata[target_column].to_numpy()
     groups = metadata["trajectory_id"].to_numpy()
     group_labels = metadata.groupby("trajectory_id", sort=False)[target_column].nunique()
-    if (group_labels != 1).any():
-        raise ValueError("Each trajectory_id must have exactly one target value for grouped classification.")
-    class_group_counts = metadata.drop_duplicates("trajectory_id").groupby(target_column)["trajectory_id"].count()
-    if len(class_group_counts) < 2 or class_group_counts.min() < config.n_splits:
-        raise ValueError("Each target class needs at least n_splits independent trajectories.")
+    is_trajectory_level = bool((group_labels == 1).all())
+    class_group_counts = (
+        metadata.drop_duplicates("trajectory_id").groupby(target_column)["trajectory_id"].count()
+        if is_trajectory_level
+        else pd.Series(dtype=int)
+    )
+    can_group_by_trajectory = (
+        is_trajectory_level
+        and len(class_group_counts) >= 2
+        and class_group_counts.min() >= config.n_splits
+    )
 
-    # Stratify independent trajectories, so long trajectories cannot dominate
-    # class balancing or leave a fold without a class.
-    trajectories = metadata.drop_duplicates("trajectory_id").reset_index(drop=True)
-    if len(trajectories) < 10:
-        warnings.warn(
-            f"Insufficient independent samples: only {len(trajectories)} independent trajectories available across classes. "
-            "Feature importance and generalization estimates carry high variance in trajectory-grouped cross-validation.",
-            UserWarning,
-            stacklevel=2,
-        )
-    splitter = StratifiedKFold(n_splits=config.n_splits, shuffle=True, random_state=config.random_state)
     splits = []
     assignment_rows = []
-    for fold, (train_groups, test_groups) in enumerate(
-        splitter.split(trajectories, trajectories[target_column]), start=1
-    ):
-        test_ids = trajectories.iloc[test_groups]["trajectory_id"]
-        test_mask = metadata["trajectory_id"].isin(test_ids).to_numpy()
-        splits.append((np.flatnonzero(~test_mask), np.flatnonzero(test_mask)))
-        for _, row in trajectories.iloc[test_groups].iterrows():
-            assignment_rows.append({"trajectory_id": row["trajectory_id"], "Target": row[target_column], "Test_Fold": fold})
+    if can_group_by_trajectory:
+        # Stratify independent trajectories, so long trajectories cannot dominate
+        # class balancing or leave a fold without a class.
+        trajectories = metadata.drop_duplicates("trajectory_id").reset_index(drop=True)
+        if len(trajectories) < 10:
+            warnings.warn(
+                f"Insufficient independent samples: only {len(trajectories)} independent trajectories available across classes. "
+                "Feature importance and generalization estimates carry high variance in trajectory-grouped cross-validation.",
+                UserWarning,
+                stacklevel=2,
+            )
+        splitter = StratifiedKFold(n_splits=config.n_splits, shuffle=True, random_state=config.random_state)
+        for fold, (train_groups, test_groups) in enumerate(
+            splitter.split(trajectories, trajectories[target_column]), start=1
+        ):
+            test_ids = trajectories.iloc[test_groups]["trajectory_id"]
+            test_mask = metadata["trajectory_id"].isin(test_ids).to_numpy()
+            splits.append((np.flatnonzero(~test_mask), np.flatnonzero(test_mask)))
+            for _, row in trajectories.iloc[test_groups].iterrows():
+                assignment_rows.append({"trajectory_id": row["trajectory_id"], "Target": row[target_column], "Test_Fold": fold})
+    else:
+        # Purged temporal block cross-validation for conformational states or within-trajectory classifications
+        val_counts = pd.Series(y).value_counts()
+        if len(val_counts) < 2 or val_counts.min() < config.n_splits:
+            raise ValueError(
+                f"Target column {target_column!r} requires at least 2 distinct classes with at least {config.n_splits} frames each."
+            )
+        block_splits = _purged_block_splits(metadata, y, config.n_splits, config.random_state)
+        for fold, (train_index, test_index) in enumerate(block_splits, start=1):
+            splits.append((train_index, test_index))
+            for idx in test_index:
+                assignment_rows.append({
+                    "trajectory_id": metadata.loc[idx, "trajectory_id"],
+                    "frame_index": metadata.loc[idx, "frame_index"] if "frame_index" in metadata.columns else idx,
+                    "Target": str(y[idx]),
+                    "Test_Fold": fold,
+                })
     metric_rows = []
     prediction_rows = []
     baseline_rows = []
