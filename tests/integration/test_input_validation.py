@@ -99,6 +99,33 @@ class IngestionTests(unittest.TestCase):
         self.assertFalse(report.trajectory.complete_scan)
         self.assertIn("frame 1", " ".join(report.errors))
 
+    def test_wrapped_coordinates_emit_loud_imaging_fix_instructions(self):
+        wrapped_pdb = (
+            "CRYST1   60.000   60.000   60.000  90.00  90.00  90.00 P 1           1\n"
+            "ATOM      1  CA  ALA A   1       1.000   1.000   1.000  1.00  0.00           C\n"
+            "ATOM      2  C   ALA A   1      59.500   1.000   1.000  1.00  0.00           C\n"
+            "CONECT    1    2\n"
+            "END\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            trajectory = Path(temporary) / "wrapped.pdb"
+            trajectory.write_text(wrapped_pdb, encoding="utf-8")
+            # Default: valid with loud warnings
+            report_warn = inspect_md_inputs(trajectory, trajectory, require_imaged=False)
+            self.assertEqual(report_warn.status, InputIntegrityStatus.VALID_WITH_WARNINGS)
+            self.assertTrue(report_warn.trajectory.wrapped_coordinates_detected)
+            warn_str = " ".join(report_warn.warnings)
+            self.assertIn("apply_imaging_transformations", warn_str)
+            self.assertIn("gmx trjconv", warn_str)
+            self.assertIn("mdconvert", warn_str)
+
+            # Strict: invalid with fatal error
+            report_err = inspect_md_inputs(trajectory, trajectory, require_imaged=True)
+            self.assertEqual(report_err.status, InputIntegrityStatus.INVALID)
+            err_str = " ".join(report_err.errors)
+            self.assertIn("PBC", err_str)
+            self.assertIn("apply_imaging_transformations", err_str)
+
 
 if __name__ == "__main__":
     unittest.main()
