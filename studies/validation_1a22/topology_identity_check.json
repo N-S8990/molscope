@@ -1,0 +1,66 @@
+{
+  "reference": "/Users/nirav/Docs/MD-ContactML/data/replica_1/temp_300K/sim_300K_prepared.pdb",
+  "checks": [
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_1/temp_300K/sim_300K_prepared.pdb",
+      "sha256": "f71efeeb92e3957b330b8b90431ead074cbe352ff56732fe1507fff54deb667f",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_1/temp_400K/sim_400K_prepared.pdb",
+      "sha256": "c5b0d66fef1b3fd7733fefbeb49a0dcdd0c468f0c74d4846e6e1e87ec57d5c77",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_2/temp_300K/sim_300K_prepared.pdb",
+      "sha256": "fad884ac9983f99edd7cb8354145f07d99a90fed493bc3149cf36e043e83b34d",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_2/temp_400K/sim_400K_prepared.pdb",
+      "sha256": "ece53e918347e998f4d864dd20be5476eb75d15195554b950803fea0e76e024d",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_3/temp_300K/sim_300K_prepared.pdb",
+      "sha256": "054611afcc46c92ed803b06861674abcecf8501fb1744fbc46cd5829db91da68",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_3/temp_400K/sim_400K_prepared.pdb",
+      "sha256": "bcf306b35ae16d8437f8b6d8029166bdaaca32c36700ce07e06ad221b6af562b",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_4/temp_300K/sim_300K_prepared.pdb",
+      "sha256": "f0ad2f0281a0a469b471863f20cb9255fffa5bf886539f91f0abd9a586ee465c",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_4/temp_400K/sim_400K_prepared.pdb",
+      "sha256": "562b9332ca732ccfc1bc8e5d39b14252cc7385da4ec1ce9cfcd7c767cc6e8633",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_5/temp_300K/sim_300K_prepared.pdb",
+      "sha256": "239a2f72d214ac05a8a41b73af2f415d9983f5d7ca38a4e9ab5d59dedb1acff1",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    },
+    {
+      "path": "/Users/nirav/Docs/MD-ContactML/data/replica_5/temp_400K/sim_400K_prepared.pdb",
+      "sha256": "c1284285dd03a2d66c5c1598a18c3a93d06ae0d794a2aabd6c2784c29627696f",
+      "atom_count": 6057,
+      "ordered_atom_residue_identity_matches_reference": true
+    }
+  ],
+  "scope": "Ordered atom names/residue names/residue IDs only; not force-field equivalence or preparation identity."
+}

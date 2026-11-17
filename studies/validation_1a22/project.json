@@ -1,0 +1,97 @@
+{
+  "schema_version": "1",
+  "project_id": "external_1a22_temperature_validation",
+  "systems": [
+    {
+      "system_id": "1A22",
+      "topology": "/Users/nirav/Docs/MD-ContactML/data/replica_1/temp_300K/sim_300K_prepared.pdb",
+      "ensembles": [
+        {
+          "ensemble_id": "temp_300K",
+          "replicas": [
+            {
+              "replica_id": "replica_1",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_1/temp_300K/sim_300K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_2",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_2/temp_300K/sim_300K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_3",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_3/temp_300K/sim_300K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_4",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_4/temp_300K/sim_300K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_5",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_5/temp_300K/sim_300K_traj.dcd"
+            }
+          ]
+        },
+        {
+          "ensemble_id": "temp_400K",
+          "replicas": [
+            {
+              "replica_id": "replica_1",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_1/temp_400K/sim_400K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_2",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_2/temp_400K/sim_400K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_3",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_3/temp_400K/sim_400K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_4",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_4/temp_400K/sim_400K_traj.dcd"
+            },
+            {
+              "replica_id": "replica_5",
+              "trajectory": "/Users/nirav/Docs/MD-ContactML/data/replica_5/temp_400K/sim_400K_traj.dcd"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "labels": [
+    {
+      "label_id": "simulation_temperature",
+      "label_type": "categorical",
+      "level": "trajectory",
+      "source": "external_annotation",
+      "description": "300 K versus 400 K condition from external 1A22 simulations; integration test only.",
+      "assignments": {
+        "1A22:temp_300K:replica_1": "300K",
+        "1A22:temp_300K:replica_2": "300K",
+        "1A22:temp_300K:replica_3": "300K",
+        "1A22:temp_300K:replica_4": "300K",
+        "1A22:temp_300K:replica_5": "300K",
+        "1A22:temp_400K:replica_1": "400K",
+        "1A22:temp_400K:replica_2": "400K",
+        "1A22:temp_400K:replica_3": "400K",
+        "1A22:temp_400K:replica_4": "400K",
+        "1A22:temp_400K:replica_5": "400K"
+      }
+    }
+  ],
+  "prediction_tasks": [
+    {
+      "task_id": "temperature_classification",
+      "task_type": "classification",
+      "target_label_id": "simulation_temperature"
+    }
+  ],
+  "analysis": {
+    "generic_feature_parameters": {
+      "frame_stride": 1,
+      "use_pbc": false
+    },
+    "plugins": []
+  }
+}
