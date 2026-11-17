@@ -10,7 +10,7 @@ from typing import Protocol
 
 import MDAnalysis as mda
 from MDAnalysis.analysis.distances import capped_distance
-from MDAnalysis.lib.distances import distance_array, calc_bonds
+from MDAnalysis.lib.distances import distance_array, calc_bonds, calc_dihedrals
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -18,7 +18,7 @@ import pandas as pd
 from molscope.core.contracts import ApplicabilityStatus, FeatureAssessment, FeatureProvenance
 from molscope.profiling.system import SystemProfile, discover_component_selections, profile_system
 
-from molscope.features.base import PluginResult, FeaturePlugin, _safe_id
+from molscope.features.base import PluginResult, FeaturePlugin, _safe_id, _chain_or_segment_id
 
 
 class ProteinBackboneTorsionPlugin:
@@ -72,9 +72,7 @@ class ProteinBackboneTorsionPlugin:
         universe.trajectory[0]
         torsions = []
         for residue in universe.select_atoms(f"protein and ({self.selection})").residues:
-            chain_ids = {value.strip() for value in residue.atoms.chainIDs if value and value.strip()}
-            segment_ids = {value.strip() for value in residue.atoms.segids if value and value.strip()}
-            scope = f"chain_{next(iter(chain_ids))}" if len(chain_ids) == 1 else f"segment_{next(iter(segment_ids))}" if len(segment_ids) == 1 else "unlabeled"
+            scope = _chain_or_segment_id(residue.atoms)
             residue_id = f"{_safe_id(scope)}__{residue.resname.strip()}_{residue.resid}"
             for torsion_name, selection in (("phi", residue.phi_selection()), ("psi", residue.psi_selection()), ("omega", residue.omega_selection())):
                 if torsion_name in self.torsions and selection is not None and len(selection) == 4:
@@ -109,16 +107,18 @@ class ProteinBackboneTorsionPlugin:
 
 
 class ProteinCADistanceContactPlugin:
-    """Non-PBC Cα pair distances and a conventional residue contact map."""
+    """Bounded Cα pair distances and a conventional residue contact map."""
 
     plugin_id = "protein.ca_distances_contacts"
-    version = "2"
+    version = "3"
     contact_cutoff_angstrom = 8.0
     minimum_sequence_separation = 3
     required_capabilities = frozenset({"protein", "coordinates"})
 
     def __init__(self, selection: str = "protein and name CA", contact_cutoff_angstrom: float = 8.0,
-                 minimum_sequence_separation: int = 3, max_pairs: int = 5000):
+                 minimum_sequence_separation: int = 3, max_pairs: int = 5000,
+                 residue_pairs: list[list[int]] | None = None, include_contacts: bool = True,
+                 use_pbc: bool = False):
         if not isinstance(selection, str) or not selection.strip():
             raise ValueError("selection must be a non-empty MDAnalysis selection.")
         if isinstance(contact_cutoff_angstrom, bool) or not isinstance(contact_cutoff_angstrom, (int, float)) or not np.isfinite(contact_cutoff_angstrom) or contact_cutoff_angstrom <= 0:
@@ -126,10 +126,30 @@ class ProteinCADistanceContactPlugin:
         for name, value, minimum in (("minimum_sequence_separation", minimum_sequence_separation, 0), ("max_pairs", max_pairs, 1)):
             if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
                 raise ValueError(f"{name} must be an integer >= {minimum}.")
+        if not isinstance(include_contacts, bool):
+            raise ValueError("include_contacts must be boolean.")
+        if not isinstance(use_pbc, bool):
+            raise ValueError("use_pbc must be boolean.")
+        if residue_pairs is not None:
+            if not isinstance(residue_pairs, (list, tuple)) or not residue_pairs:
+                raise ValueError("residue_pairs must be a non-empty list of two-residue pairs.")
+            normalized = []
+            for pair in residue_pairs:
+                if not isinstance(pair, (list, tuple)) or len(pair) != 2 or any(isinstance(value, bool) or not isinstance(value, int) for value in pair) or pair[0] == pair[1]:
+                    raise ValueError("Each residue pair must contain two distinct integer residue IDs.")
+                normalized.append(tuple(sorted(pair)))
+            if len(set(normalized)) != len(normalized):
+                raise ValueError("residue_pairs must be unique.")
+            if len(normalized) > max_pairs:
+                raise ValueError("residue_pairs exceeds max_pairs.")
+            residue_pairs = normalized
         self.selection = selection
         self.contact_cutoff_angstrom = float(contact_cutoff_angstrom)
         self.minimum_sequence_separation = minimum_sequence_separation
         self.max_pairs = max_pairs
+        self.residue_pairs = residue_pairs
+        self.include_contacts = include_contacts
+        self.use_pbc = use_pbc
 
     def assess(self, profile: SystemProfile) -> FeatureAssessment:
         missing = tuple(sorted(self.required_capabilities - profile.capabilities))
@@ -144,6 +164,8 @@ class ProteinCADistanceContactPlugin:
         assessment = self.assess(profile)
         if assessment.status is not ApplicabilityStatus.APPLICABLE:
             return PluginResult(pd.DataFrame(), pd.DataFrame(), assessment, None)
+        if self.use_pbc and not profile.has_periodic_cell:
+            raise ValueError("PBC-aware Cα distances require positive periodic-cell metadata in the trajectory.")
         start = perf_counter()
         universe = mda.Universe(str(topology), str(trajectory))
         if max_frames is not None and (isinstance(max_frames, bool) or not isinstance(max_frames, int) or max_frames < 1):
@@ -152,14 +174,30 @@ class ProteinCADistanceContactPlugin:
         if len(alpha_carbons) < 2:
             unavailable = FeatureAssessment(self.plugin_id, "protein_geometry", ApplicabilityStatus.NOT_APPLICABLE, "Fewer than two protein Cα atoms were found.", "frame", "angstrom")
             return PluginResult(pd.DataFrame(), pd.DataFrame(), unavailable, None)
+        if self.residue_pairs is None:
+            candidate_indices = combinations(range(len(alpha_carbons)), 2)
+        else:
+            by_resid = {}
+            for index, atom in enumerate(alpha_carbons):
+                by_resid.setdefault(int(atom.resid), []).append(index)
+            missing = [pair for pair in self.residue_pairs if any(len(by_resid.get(resid, ())) != 1 for resid in pair)]
+            if missing:
+                raise ValueError(f"Selected residue pairs require one Cα per residue ID; invalid pairs: {missing[:5]}")
+            candidate_indices = ((by_resid[left][0], by_resid[right][0]) for left, right in self.residue_pairs)
         pairs = []
-        for left_index, right_index in combinations(range(len(alpha_carbons)), 2):
+        for left_index, right_index in candidate_indices:
             left, right = alpha_carbons[left_index], alpha_carbons[right_index]
-            same_chain = (left.chainID or left.segid) == (right.chainID or right.segid)
+            left_scope = _chain_or_segment_id(left.residue.atoms)
+            right_scope = _chain_or_segment_id(right.residue.atoms)
+            same_chain = left_scope == right_scope
             if same_chain and abs(left.resid - right.resid) < self.minimum_sequence_separation:
+                if self.residue_pairs is not None:
+                    raise ValueError(f"Declared pair {left.resid}, {right.resid} violates minimum_sequence_separation.")
                 continue
-            left_id = _safe_id(f"{left.chainID or left.segid or 'unlabeled'}__{left.resname}_{left.resid}")
-            right_id = _safe_id(f"{right.chainID or right.segid or 'unlabeled'}__{right.resname}_{right.resid}")
+            left_chain = left_scope.removeprefix("chain_").removeprefix("segment_")
+            right_chain = right_scope.removeprefix("chain_").removeprefix("segment_")
+            left_id = _safe_id(f"{left_chain}__{left.resname}_{left.resid}")
+            right_id = _safe_id(f"{right_chain}__{right.resname}_{right.resid}")
             pairs.append((left_index, right_index, f"{left_id}__{right_id}"))
             if len(pairs) > self.max_pairs:
                 raise ValueError(f"Cα pair count exceeds max_pairs={self.max_pairs}; narrow selection or explicitly raise the limit.")
@@ -171,30 +209,274 @@ class ProteinCADistanceContactPlugin:
             frame_indices = frame_indices[:max_frames]
         if len({pair_id for _, _, pair_id in pairs}) != len(pairs):
             raise ValueError("Ambiguous Cα residue identities; resolve duplicate chain/residue labels before extraction.")
-        contact_presence = {pair_id: [] for _, _, pair_id in pairs}
+        contact_presence = {pair_id: [] for _, _, pair_id in pairs} if self.include_contacts else {}
         left_indices, right_indices = np.asarray([(left, right) for left, right, _ in pairs]).T
         records = []
         for output_order, frame_index in enumerate(frame_indices):
             universe.trajectory[frame_index]
-            distances = calc_bonds(alpha_carbons.positions[left_indices], alpha_carbons.positions[right_indices])
+            distances = calc_bonds(
+                alpha_carbons.positions[left_indices], alpha_carbons.positions[right_indices],
+                box=universe.dimensions if self.use_pbc else None,
+            )
             row = {"frame_index": frame_index, "frame_order": output_order, "time_ps": float(universe.trajectory.ts.time)}
             for pair_index, (_, _, pair_id) in enumerate(pairs):
                 distance = float(distances[pair_index])
-                contact = distance <= self.contact_cutoff_angstrom
                 row[f"CA_DISTANCE_angstrom__{pair_id}"] = distance
-                row[f"CA_CONTACT__{pair_id}"] = float(contact)
-                contact_presence[pair_id].append(contact)
+                if self.include_contacts:
+                    contact = distance <= self.contact_cutoff_angstrom
+                    row[f"CA_CONTACT__{pair_id}"] = float(contact)
+                    contact_presence[pair_id].append(contact)
             records.append(row)
         trajectory_features = pd.DataFrame([{
             f"CA_CONTACT_occupancy__{pair_id}": float(np.mean(values))
             for pair_id, values in contact_presence.items()
-        }])
+        }]) if self.include_contacts else pd.DataFrame()
         provenance = FeatureProvenance(
             self.plugin_id, self.version,
-            {"contact_cutoff_angstrom": self.contact_cutoff_angstrom, "minimum_sequence_separation": self.minimum_sequence_separation, "atom_selection": self.selection, "max_pairs": self.max_pairs, "pbc": False, "max_frames": max_frames, "frame_stride": frame_stride},
+            {"contact_cutoff_angstrom": self.contact_cutoff_angstrom, "minimum_sequence_separation": self.minimum_sequence_separation, "atom_selection": self.selection, "max_pairs": self.max_pairs, "residue_pairs": self.residue_pairs, "include_contacts": self.include_contacts, "pbc": self.use_pbc, "max_frames": max_frames, "frame_stride": frame_stride},
             str(topology), str(trajectory), perf_counter() - start,
         )
         return PluginResult(pd.DataFrame.from_records(records), trajectory_features, assessment, provenance)
+
+
+class ProteinResidueHeavyDistancePlugin:
+    """Bounded closest-heavy-atom residue distances, matching a common MD feature convention."""
+
+    plugin_id = "protein.residue_heavy_distances_contacts"
+    version = "1"
+    required_capabilities = frozenset({"protein", "coordinates"})
+
+    def __init__(self, selection: str = "protein", contact_cutoff_angstrom: float = 4.5,
+                 minimum_sequence_separation: int = 1, max_pairs: int = 5_000,
+                 include_contacts: bool = True, use_pbc: bool = False):
+        if not isinstance(selection, str) or not selection.strip():
+            raise ValueError("selection must be a non-empty MDAnalysis selection.")
+        if isinstance(contact_cutoff_angstrom, bool) or not isinstance(contact_cutoff_angstrom, (int, float)) or not np.isfinite(contact_cutoff_angstrom) or contact_cutoff_angstrom <= 0:
+            raise ValueError("contact_cutoff_angstrom must be finite and positive.")
+        if isinstance(minimum_sequence_separation, bool) or not isinstance(minimum_sequence_separation, int) or minimum_sequence_separation < 0:
+            raise ValueError("minimum_sequence_separation must be an integer >= 0.")
+        if isinstance(max_pairs, bool) or not isinstance(max_pairs, int) or max_pairs < 1:
+            raise ValueError("max_pairs must be positive.")
+        if not isinstance(include_contacts, bool) or not isinstance(use_pbc, bool):
+            raise ValueError("include_contacts and use_pbc must be boolean.")
+        self.selection = selection
+        self.contact_cutoff_angstrom = float(contact_cutoff_angstrom)
+        self.minimum_sequence_separation = minimum_sequence_separation
+        self.max_pairs = max_pairs
+        self.include_contacts = include_contacts
+        self.use_pbc = use_pbc
+
+    def assess(self, profile: SystemProfile) -> FeatureAssessment:
+        missing = tuple(sorted(self.required_capabilities - profile.capabilities))
+        if missing:
+            return FeatureAssessment(self.plugin_id, "protein_geometry", ApplicabilityStatus.NOT_APPLICABLE,
+                                     "Closest-heavy-atom residue distances require protein coordinates.", "frame", "angstrom",
+                                     missing_capabilities=missing)
+        return FeatureAssessment(self.plugin_id, "protein_geometry", ApplicabilityStatus.APPLICABLE,
+                                 "Protein coordinates are available; complete heavy-atom residues are checked during extraction.",
+                                 "frame", "angstrom")
+
+    def extract(self, topology: str | Path, trajectory: str | Path, *, max_frames: int | None = None,
+                frame_stride: int = 1) -> PluginResult:
+        if isinstance(frame_stride, bool) or not isinstance(frame_stride, int) or frame_stride < 1:
+            raise ValueError("frame_stride must be positive.")
+        if max_frames is not None and (isinstance(max_frames, bool) or not isinstance(max_frames, int) or max_frames < 1):
+            raise ValueError("max_frames must be a positive integer.")
+        profile = profile_system(topology, trajectory)
+        assessment = self.assess(profile)
+        if assessment.status is not ApplicabilityStatus.APPLICABLE:
+            return PluginResult(pd.DataFrame(), pd.DataFrame(), assessment, None)
+        if self.use_pbc and not profile.has_periodic_cell:
+            raise ValueError("PBC-aware residue distances require positive periodic-cell metadata in the trajectory.")
+        start = perf_counter()
+        universe = mda.Universe(str(topology), str(trajectory))
+        selected_residues = list(universe.select_atoms(f"protein and ({self.selection})").residues)
+        residues = []
+        for residue in selected_residues:
+            heavy = residue.atoms.select_atoms("not name H*")
+            if len(heavy):
+                residues.append((residue, np.asarray(heavy.indices, dtype=int)))
+        pairs = []
+        for left_index, right_index in combinations(range(len(residues)), 2):
+            left, left_atoms = residues[left_index]
+            right, right_atoms = residues[right_index]
+            if _chain_or_segment_id(left.atoms) == _chain_or_segment_id(right.atoms) and abs(int(left.resid) - int(right.resid)) < self.minimum_sequence_separation:
+                continue
+            left_id = _safe_id(f"{_chain_or_segment_id(left.atoms)}__{left.resname}_{left.resid}")
+            right_id = _safe_id(f"{_chain_or_segment_id(right.atoms)}__{right.resname}_{right.resid}")
+            pairs.append((left_atoms, right_atoms, f"{left_id}__{right_id}"))
+            if len(pairs) > self.max_pairs:
+                raise ValueError(f"Residue heavy-atom pair count exceeds max_pairs={self.max_pairs}; narrow selection or raise the limit.")
+        if not pairs:
+            unavailable = FeatureAssessment(self.plugin_id, "protein_geometry", ApplicabilityStatus.NOT_APPLICABLE,
+                                            "No complete residue-heavy-atom pairs remain after the declared selection policy.", "frame", "angstrom")
+            return PluginResult(pd.DataFrame(), pd.DataFrame(), unavailable, None)
+        if len({pair_id for _, _, pair_id in pairs}) != len(pairs):
+            raise ValueError("Ambiguous residue identities; resolve duplicate chain/residue labels before extraction.")
+        frame_indices = list(range(0, len(universe.trajectory), frame_stride))
+        if max_frames is not None:
+            frame_indices = frame_indices[:max_frames]
+        contact_presence = {pair_id: [] for _, _, pair_id in pairs} if self.include_contacts else {}
+        records = []
+        for order, frame_index in enumerate(frame_indices):
+            universe.trajectory[frame_index]
+            box = universe.dimensions if self.use_pbc else None
+            row = {"frame_index": frame_index, "frame_order": order, "time_ps": float(universe.trajectory.ts.time)}
+            for left_atoms, right_atoms, pair_id in pairs:
+                distance = float(np.min(distance_array(universe.atoms.positions[left_atoms], universe.atoms.positions[right_atoms], box=box)))
+                row[f"RESIDUE_HEAVY_DISTANCE_angstrom__{pair_id}"] = distance
+                if self.include_contacts:
+                    contact = distance <= self.contact_cutoff_angstrom
+                    row[f"RESIDUE_HEAVY_CONTACT__{pair_id}"] = float(contact)
+                    contact_presence[pair_id].append(contact)
+            records.append(row)
+        trajectory_features = pd.DataFrame([{
+            f"RESIDUE_HEAVY_CONTACT_occupancy__{pair_id}": float(np.mean(values))
+            for pair_id, values in contact_presence.items()
+        }]) if self.include_contacts else pd.DataFrame()
+        provenance = FeatureProvenance(
+            self.plugin_id, self.version,
+            {"atom_selection": self.selection, "distance_convention": "closest_heavy_atom", "contact_cutoff_angstrom": self.contact_cutoff_angstrom,
+             "minimum_sequence_separation": self.minimum_sequence_separation, "max_pairs": self.max_pairs,
+             "include_contacts": self.include_contacts, "pbc": self.use_pbc, "max_frames": max_frames, "frame_stride": frame_stride},
+            str(topology), str(trajectory), perf_counter() - start,
+        )
+        return PluginResult(pd.DataFrame.from_records(records), trajectory_features, assessment, provenance)
+
+
+class ProteinSidechainTorsionPlugin:
+    """Selected protein side-chain chi angles from atom geometry, without bonds."""
+
+    plugin_id = "protein.sidechain_torsions"
+    version = "2"
+    required_capabilities = frozenset({"protein", "coordinates"})
+    chi1_end = {
+        "ARG": "CG", "ASN": "CG", "ASP": "CG", "GLN": "CG", "GLU": "CG",
+        "HIS": "CG", "HSD": "CG", "HSE": "CG", "ILE": "CG1", "LEU": "CG",
+        "LYS": "CG", "MET": "CG", "PHE": "CG", "PRO": "CG", "SER": "OG",
+        "THR": "OG1", "TRP": "CG", "TYR": "CG", "VAL": "CG1",
+    }
+    chi2_end = {
+        "ARG": "CD", "ASN": "OD1", "ASP": "OD1", "GLN": "CD", "GLU": "CD",
+        "HIS": "ND1", "HSD": "ND1", "HSE": "ND1", "ILE": "CD1", "LEU": "CD1",
+        "LYS": "CD", "MET": "SD", "PHE": "CD1", "PRO": "CD", "TRP": "CD1",
+        "TYR": "CD1",
+    }
+    chi3_atoms = {
+        "ARG": ("CB", "CG", "CD", "NE"), "GLN": ("CB", "CG", "CD", "OE1"),
+        "GLU": ("CB", "CG", "CD", "OE1"), "LYS": ("CB", "CG", "CD", "CE"),
+        "MET": ("CB", "CG", "SD", "CE"),
+    }
+    chi4_atoms = {
+        "ARG": ("CG", "CD", "NE", "CZ"), "LYS": ("CG", "CD", "CE", "NZ"),
+    }
+
+    def __init__(self, residue_ids: list[int] | None = None, include_chi2: bool = True,
+                 include_chi3: bool = True, include_chi4: bool = True, max_torsions: int = 100):
+        if residue_ids is not None and (not isinstance(residue_ids, (list, tuple)) or not residue_ids
+                                        or any(isinstance(value, bool) or not isinstance(value, int) for value in residue_ids)
+                                        or len(set(residue_ids)) != len(residue_ids)):
+            raise ValueError("residue_ids must be a non-empty unique list of integers.")
+        if not isinstance(include_chi2, bool):
+            raise ValueError("include_chi2 must be boolean.")
+        if not isinstance(include_chi3, bool) or not isinstance(include_chi4, bool):
+            raise ValueError("include_chi3 and include_chi4 must be boolean.")
+        if isinstance(max_torsions, bool) or not isinstance(max_torsions, int) or max_torsions < 1:
+            raise ValueError("max_torsions must be positive.")
+        self.residue_ids = tuple(residue_ids) if residue_ids is not None else None
+        self.include_chi2 = include_chi2
+        self.include_chi3 = include_chi3
+        self.include_chi4 = include_chi4
+        self.max_torsions = max_torsions
+
+    def assess(self, profile: SystemProfile) -> FeatureAssessment:
+        missing = tuple(sorted(self.required_capabilities - profile.capabilities))
+        if missing:
+            return FeatureAssessment(self.plugin_id, "protein_chemistry", ApplicabilityStatus.NOT_APPLICABLE,
+                                     "Side-chain torsions need protein coordinates.", "frame", "unitless",
+                                     missing_capabilities=missing)
+        return FeatureAssessment(self.plugin_id, "protein_chemistry", ApplicabilityStatus.APPLICABLE,
+                                 "Side-chain torsions use named atoms; availability is checked during extraction.",
+                                 "frame", "unitless")
+
+    def extract(self, topology: str | Path, trajectory: str | Path, *, max_frames: int | None = None,
+                frame_stride: int = 1) -> PluginResult:
+        if isinstance(frame_stride, bool) or not isinstance(frame_stride, int) or frame_stride < 1:
+            raise ValueError("frame_stride must be positive.")
+        if max_frames is not None and (isinstance(max_frames, bool) or not isinstance(max_frames, int) or max_frames < 1):
+            raise ValueError("max_frames must be a positive integer.")
+        profile = profile_system(topology, trajectory)
+        assessment = self.assess(profile)
+        if assessment.status is not ApplicabilityStatus.APPLICABLE:
+            return PluginResult(pd.DataFrame(), pd.DataFrame(), assessment, None)
+        start = perf_counter()
+        universe = mda.Universe(str(topology), str(trajectory))
+        residues = list(universe.select_atoms("protein").residues)
+        if self.residue_ids is not None:
+            selected = [residue for resid in self.residue_ids for residue in residues if int(residue.resid) == resid]
+            if len(selected) != len(self.residue_ids) or len({int(residue.resid) for residue in selected}) != len(selected):
+                raise ValueError("Each selected residue ID must identify exactly one protein residue.")
+            residues = selected
+        torsions = []
+        for residue in residues:
+            atom_indices = {}
+            for atom in residue.atoms:
+                atom_indices.setdefault(atom.name.strip(), []).append(int(atom.ix))
+            def indices(names):
+                if any(len(atom_indices.get(name, ())) != 1 for name in names):
+                    return None
+                return tuple(atom_indices[name][0] for name in names)
+            name = residue.resname.strip()
+            scope = _chain_or_segment_id(residue.atoms)
+            identifier = f"{_safe_id(scope)}__{name}_{int(residue.resid)}"
+            if name in self.chi1_end:
+                group = indices(("N", "CA", "CB", self.chi1_end[name]))
+                if group is not None:
+                    torsions.append((f"SIDECHAIN_chi1__{identifier}", group))
+            if self.include_chi2 and name in self.chi2_end:
+                group = indices(("CA", "CB", "CG" if name != "ILE" else "CG1", self.chi2_end[name]))
+                if group is not None:
+                    torsions.append((f"SIDECHAIN_chi2__{identifier}", group))
+            if self.include_chi3 and name in self.chi3_atoms:
+                group = indices(self.chi3_atoms[name])
+                if group is not None:
+                    torsions.append((f"SIDECHAIN_chi3__{identifier}", group))
+            if self.include_chi4 and name in self.chi4_atoms:
+                group = indices(self.chi4_atoms[name])
+                if group is not None:
+                    torsions.append((f"SIDECHAIN_chi4__{identifier}", group))
+        if not torsions:
+            unavailable = FeatureAssessment(self.plugin_id, "protein_chemistry", ApplicabilityStatus.NOT_APPLICABLE,
+                                            "No complete selected side-chain torsions were found.", "frame", "unitless")
+            return PluginResult(pd.DataFrame(), pd.DataFrame(), unavailable, None)
+        if len(torsions) > self.max_torsions:
+            raise ValueError(f"Side-chain torsion count exceeds max_torsions={self.max_torsions}.")
+        if len({name for name, _ in torsions}) != len(torsions):
+            raise ValueError("Ambiguous selected side-chain torsion identities.")
+        indices_by_atom = np.array([item[1] for item in torsions], dtype=int)
+        frame_indices = list(range(0, len(universe.trajectory), frame_stride))
+        if max_frames is not None:
+            frame_indices = frame_indices[:max_frames]
+        records = []
+        for order, frame_index in enumerate(frame_indices):
+            universe.trajectory[frame_index]
+            positions = universe.atoms.positions
+            angles = calc_dihedrals(*(positions[indices_by_atom[:, column]] for column in range(4)))
+            if not np.isfinite(angles).all():
+                raise ValueError(f"Nonfinite side-chain torsion at frame {frame_index}.")
+            row = {"frame_index": frame_index, "frame_order": order, "time_ps": float(universe.trajectory.ts.time)}
+            for (feature_id, _), angle in zip(torsions, angles, strict=True):
+                row[f"{feature_id}__sin"] = float(np.sin(angle))
+                row[f"{feature_id}__cos"] = float(np.cos(angle))
+            records.append(row)
+        provenance = FeatureProvenance(self.plugin_id, self.version,
+                                      {"residue_ids": self.residue_ids, "include_chi2": self.include_chi2,
+                                       "include_chi3": self.include_chi3, "include_chi4": self.include_chi4,
+                                       "max_torsions": self.max_torsions, "selected_atom_quartets":
+                                       {name: indices for name, indices in torsions}, "pbc": False,
+                                       "max_frames": max_frames, "frame_stride": frame_stride},
+                                      str(topology), str(trajectory), perf_counter() - start)
+        return PluginResult(pd.DataFrame.from_records(records), pd.DataFrame(), assessment, provenance)
 
 
 class ProteinDSSPPlugin:
