@@ -52,12 +52,38 @@ def _plot_quality(quality: pd.DataFrame, output_path: Path) -> None:
     plotted = quality[quality["Pareto_Eligible"]].copy()
     if plotted.empty:
         return
+    y_col = "Replica_Consistency"
+    y_label = "Replica consistency"
+    if (
+        "Replica_Consistency" not in plotted.columns
+        or pd.to_numeric(plotted["Replica_Consistency"], errors="coerce").notna().sum() == 0
+    ):
+        if "Uniqueness" in plotted.columns and pd.to_numeric(plotted["Uniqueness"], errors="coerce").notna().sum() > 0:
+            y_col = "Uniqueness"
+            y_label = "Information uniqueness"
+        elif (
+            "Occupancy_Entropy" in plotted.columns
+            and pd.to_numeric(plotted["Occupancy_Entropy"], errors="coerce").notna().sum() > 0
+        ):
+            y_col = "Occupancy_Entropy"
+            y_label = "Occupancy entropy"
+
+    plotted[y_col] = pd.to_numeric(plotted[y_col], errors="coerce")
+    plotted["ESS_Ratio"] = pd.to_numeric(plotted["ESS_Ratio"], errors="coerce")
+    valid = plotted.dropna(subset=["ESS_Ratio", y_col])
+    if valid.empty:
+        return
+
     fig, ax = plt.subplots(figsize=(8, 6))
-    non_front = plotted[~plotted["Pareto_Front"]]
-    front = plotted[plotted["Pareto_Front"]]
-    ax.scatter(non_front["ESS_Ratio"], non_front["Replica_Consistency"], s=18, alpha=0.35, label="Other eligible features")
-    ax.scatter(front["ESS_Ratio"], front["Replica_Consistency"], s=36, color="#d95f02", label="Pareto candidates")
-    ax.set(xlabel="Effective sample-size ratio", ylabel="Replica consistency", title="Label-independent feature-quality trade-offs")
+    non_front = valid[~valid["Pareto_Front"]]
+    front = valid[valid["Pareto_Front"]]
+    ax.scatter(non_front["ESS_Ratio"], non_front[y_col], s=18, alpha=0.35, label="Other eligible features")
+    ax.scatter(front["ESS_Ratio"], front[y_col], s=36, color="#d95f02", label="Pareto candidates")
+    ax.set(
+        xlabel="Effective sample-size ratio",
+        ylabel=y_label,
+        title=f"Label-independent feature-quality trade-offs (ESS vs {y_label})",
+    )
     ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(output_path, dpi=200)
