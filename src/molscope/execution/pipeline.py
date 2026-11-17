@@ -240,6 +240,7 @@ class MDContactMLPipeline:
             features=self.features,
             representation_coordinates=self.table("representation_coordinates"),
             supervised_model_summary=self.table("supervised_model_summary") if "supervised_model_summary" in self.outputs else None,
+            state_assignments=self.table("state_assignments") if "state_assignments" in self.outputs else None,
         )
         for fig_name in figures:
             src_f = destination / fig_name
@@ -262,15 +263,15 @@ class MDContactMLPipeline:
         if self.manifest is not None and "topology_path" in self.manifest.columns:
             top_paths = [p for p in self.manifest["topology_path"].dropna().unique() if Path(p).is_file()]
             if top_paths:
-                from molscope.reporting.pymol import export_3d_visualization, extract_residue_scores
+                from molscope.visualization.pdb_mapping import generate_3d_visualization
                 score_tbl = self.table("sam_mfp_candidates") if "sam_mfp_candidates" in self.outputs else self.table("representation_feature_salience")
                 score_col = "PCA_Salience" if "PCA_Salience" in score_tbl.columns else score_tbl.select_dtypes(include="number").columns[0]
-                res_scores = extract_residue_scores(score_tbl, score_column=score_col)
-                export_3d_visualization(
-                    topology=top_paths[0],
+                generate_3d_visualization(
+                    topology_path=top_paths[0],
+                    importance_df=score_tbl,
                     output_dir=viz_dir,
-                    residue_scores=res_scores,
                     basename="molscope_3d",
+                    importance_col=score_col,
                 )
 
         return destination
