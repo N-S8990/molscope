@@ -1,0 +1,566 @@
+{
+  "timestamp": "2026-11-17T15:12:39Z",
+  "total_benchmark_time_seconds": 12.086647209012881,
+  "synthetic_benchmark": {
+    "dataset": "synthetic_planted",
+    "n_features": 20,
+    "n_planted": 3,
+    "wall_time_seconds": 0.01040937498328276,
+    "pareto_front_size": 3,
+    "planted_recovered": [
+      "feat_00",
+      "feat_01",
+      "feat_02"
+    ],
+    "planted_recall": 1.0,
+    "summary_table": [
+      {
+        "Baseline": "rf",
+        "Top_K": 3,
+        "Pareto_Count": 3,
+        "Overlap_Count": 3,
+        "Top_K_Recall": 1.0,
+        "Pareto_Precision": 1.0,
+        "Jaccard_Index": 1.0,
+        "Spearman_Rho": 0.4015037593984962,
+        "Spearman_PValue": 0.07931658537453376
+      },
+      {
+        "Baseline": "dt",
+        "Top_K": 3,
+        "Pareto_Count": 3,
+        "Overlap_Count": 3,
+        "Top_K_Recall": 1.0,
+        "Pareto_Precision": 1.0,
+        "Jaccard_Index": 1.0,
+        "Spearman_Rho": 0.35639097744360904,
+        "Spearman_PValue": 0.12298631080226878
+      },
+      {
+        "Baseline": "mi",
+        "Top_K": 3,
+        "Pareto_Count": 3,
+        "Overlap_Count": 3,
+        "Top_K_Recall": 1.0,
+        "Pareto_Precision": 1.0,
+        "Jaccard_Index": 1.0,
+        "Spearman_Rho": 0.44616749340968354,
+        "Spearman_PValue": 0.048626198511548493
+      },
+      {
+        "Baseline": "permutation",
+        "Top_K": 3,
+        "Pareto_Count": 3,
+        "Overlap_Count": 3,
+        "Top_K_Recall": 1.0,
+        "Pareto_Precision": 1.0,
+        "Jaccard_Index": 1.0,
+        "Spearman_Rho": 0.3443609022556391,
+        "Spearman_PValue": 0.13707258150434387
+      },
+      {
+        "Baseline": "variance",
+        "Top_K": 3,
+        "Pareto_Count": 3,
+        "Overlap_Count": 1,
+        "Top_K_Recall": 0.3333333333333333,
+        "Pareto_Precision": 0.3333333333333333,
+        "Jaccard_Index": 0.2,
+        "Spearman_Rho": -0.019548872180451125,
+        "Spearman_PValue": 0.9348031235214638
+      },
+      {
+        "Baseline": "random",
+        "Top_K": 3,
+        "Pareto_Count": 3,
+        "Overlap_Count": 1,
+        "Top_K_Recall": 0.3333333333333333,
+        "Pareto_Precision": 0.3333333333333333,
+        "Jaccard_Index": 0.2,
+        "Spearman_Rho": 0.24060150375939846,
+        "Spearman_PValue": 0.30686109167827574
+      }
+    ],
+    "planted_evaluation": [
+      {
+        "Method": "rf",
+        "Planted_Recall": 1.0,
+        "Planted_Jaccard": 1.0,
+        "Top_Features": [
+          "feat_00",
+          "feat_01",
+          "feat_02"
+        ]
+      },
+      {
+        "Method": "dt",
+        "Planted_Recall": 1.0,
+        "Planted_Jaccard": 1.0,
+        "Top_Features": [
+          "feat_00",
+          "feat_01",
+          "feat_02"
+        ]
+      },
+      {
+        "Method": "mi",
+        "Planted_Recall": 1.0,
+        "Planted_Jaccard": 1.0,
+        "Top_Features": [
+          "feat_00",
+          "feat_02",
+          "feat_01"
+        ]
+      },
+      {
+        "Method": "permutation",
+        "Planted_Recall": 1.0,
+        "Planted_Jaccard": 1.0,
+        "Top_Features": [
+          "feat_00",
+          "feat_01",
+          "feat_02"
+        ]
+      },
+      {
+        "Method": "variance",
+        "Planted_Recall": 0.3333333333333333,
+        "Planted_Jaccard": 0.2,
+        "Top_Features": [
+          "feat_02",
+          "feat_15",
+          "feat_16"
+        ]
+      },
+      {
+        "Method": "random",
+        "Planted_Recall": 0.3333333333333333,
+        "Planted_Jaccard": 0.2,
+        "Top_Features": [
+          "feat_05",
+          "feat_11",
+          "feat_02"
+        ]
+      },
+      {
+        "Method": "SAM-MFP (Pareto Front)",
+        "Planted_Recall": 1.0,
+        "Planted_Jaccard": 1.0,
+        "Top_Features": [
+          "feat_00",
+          "feat_02",
+          "feat_01"
+        ]
+      }
+    ]
+  },
+  "real_2rjy_benchmark": {
+    "dataset": "2RJY_villin_headpiece",
+    "n_frames": 2000,
+    "total_features": 3818,
+    "eligible_features": 2091,
+    "pareto_front_count": 340,
+    "timings_seconds": {
+      "sam_mfp_prioritization": 0.03920887500862591,
+      "variance_baseline": 0.011686915997415781,
+      "mutual_info_baseline": 8.320646791980835,
+      "decision_tree_baseline": 2.361768041999312,
+      "random_baseline": 0.005475832993397489
+    },
+    "baseline_comparison": [
+      {
+        "Baseline": "variance",
+        "Top_K": 10,
+        "Pareto_Count": 340,
+        "Overlap_Count": 4,
+        "Top_K_Recall": 0.4,
+        "Pareto_Precision": 0.011764705882352941,
+        "Jaccard_Index": 0.011560693641618497,
+        "Spearman_Rho": 0.7756644535773137,
+        "Spearman_PValue": 0.0,
+        "Divergent_Baseline_Top_Count": 6,
+        "Divergent_Pareto_Count": 336
+      },
+      {
+        "Baseline": "mi",
+        "Top_K": 10,
+        "Pareto_Count": 340,
+        "Overlap_Count": 1,
+        "Top_K_Recall": 0.1,
+        "Pareto_Precision": 0.0029411764705882353,
+        "Jaccard_Index": 0.0028653295128939827,
+        "Spearman_Rho": 0.8544620462032861,
+        "Spearman_PValue": 0.0,
+        "Divergent_Baseline_Top_Count": 9,
+        "Divergent_Pareto_Count": 339
+      },
+      {
+        "Baseline": "dt",
+        "Top_K": 10,
+        "Pareto_Count": 340,
+        "Overlap_Count": 0,
+        "Top_K_Recall": 0.0,
+        "Pareto_Precision": 0.0,
+        "Jaccard_Index": 0.0,
+        "Spearman_Rho": 0.029981602842390168,
+        "Spearman_PValue": 0.17054004033441902,
+        "Divergent_Baseline_Top_Count": 10,
+        "Divergent_Pareto_Count": 340
+      },
+      {
+        "Baseline": "random",
+        "Top_K": 10,
+        "Pareto_Count": 340,
+        "Overlap_Count": 0,
+        "Top_K_Recall": 0.0,
+        "Pareto_Precision": 0.0,
+        "Jaccard_Index": 0.0,
+        "Spearman_Rho": 0.006454157999886044,
+        "Spearman_PValue": 0.7680253508686818,
+        "Divergent_Baseline_Top_Count": 10,
+        "Divergent_Pareto_Count": 340
+      },
+      {
+        "Baseline": "variance",
+        "Top_K": 20,
+        "Pareto_Count": 340,
+        "Overlap_Count": 8,
+        "Top_K_Recall": 0.4,
+        "Pareto_Precision": 0.023529411764705882,
+        "Jaccard_Index": 0.022727272727272728,
+        "Spearman_Rho": 0.7756644535773137,
+        "Spearman_PValue": 0.0,
+        "Divergent_Baseline_Top_Count": 12,
+        "Divergent_Pareto_Count": 332
+      },
+      {
+        "Baseline": "mi",
+        "Top_K": 20,
+        "Pareto_Count": 340,
+        "Overlap_Count": 1,
+        "Top_K_Recall": 0.05,
+        "Pareto_Precision": 0.0029411764705882353,
+        "Jaccard_Index": 0.002785515320334262,
+        "Spearman_Rho": 0.8544620462032861,
+        "Spearman_PValue": 0.0,
+        "Divergent_Baseline_Top_Count": 19,
+        "Divergent_Pareto_Count": 339
+      },
+      {
+        "Baseline": "dt",
+        "Top_K": 20,
+        "Pareto_Count": 340,
+        "Overlap_Count": 3,
+        "Top_K_Recall": 0.15,
+        "Pareto_Precision": 0.008823529411764706,
+        "Jaccard_Index": 0.008403361344537815,
+        "Spearman_Rho": 0.029981602842390168,
+        "Spearman_PValue": 0.17054004033441902,
+        "Divergent_Baseline_Top_Count": 17,
+        "Divergent_Pareto_Count": 337
+      },
+      {
+        "Baseline": "random",
+        "Top_K": 20,
+        "Pareto_Count": 340,
+        "Overlap_Count": 1,
+        "Top_K_Recall": 0.05,
+        "Pareto_Precision": 0.0029411764705882353,
+        "Jaccard_Index": 0.002785515320334262,
+        "Spearman_Rho": 0.006454157999886044,
+        "Spearman_PValue": 0.7680253508686818,
+        "Divergent_Baseline_Top_Count": 19,
+        "Divergent_Pareto_Count": 339
+      },
+      {
+        "Baseline": "variance",
+        "Top_K": 50,
+        "Pareto_Count": 340,
+        "Overlap_Count": 15,
+        "Top_K_Recall": 0.3,
+        "Pareto_Precision": 0.04411764705882353,
+        "Jaccard_Index": 0.04,
+        "Spearman_Rho": 0.7756644535773137,
+        "Spearman_PValue": 0.0,
+        "Divergent_Baseline_Top_Count": 35,
+        "Divergent_Pareto_Count": 325
+      },
+      {
+        "Baseline": "mi",
+        "Top_K": 50,
+        "Pareto_Count": 340,
+        "Overlap_Count": 4,
+        "Top_K_Recall": 0.08,
+        "Pareto_Precision": 0.011764705882352941,
+        "Jaccard_Index": 0.010362694300518135,
+        "Spearman_Rho": 0.8544620462032861,
+        "Spearman_PValue": 0.0,
+        "Divergent_Baseline_Top_Count": 46,
+        "Divergent_Pareto_Count": 336
+      },
+      {
+        "Baseline": "dt",
+        "Top_K": 50,
+        "Pareto_Count": 340,
+        "Overlap_Count": 8,
+        "Top_K_Recall": 0.16,
+        "Pareto_Precision": 0.023529411764705882,
+        "Jaccard_Index": 0.020942408376963352,
+        "Spearman_Rho": 0.029981602842390168,
+        "Spearman_PValue": 0.17054004033441902,
+        "Divergent_Baseline_Top_Count": 42,
+        "Divergent_Pareto_Count": 332
+      },
+      {
+        "Baseline": "random",
+        "Top_K": 50,
+        "Pareto_Count": 340,
+        "Overlap_Count": 1,
+        "Top_K_Recall": 0.02,
+        "Pareto_Precision": 0.0029411764705882353,
+        "Jaccard_Index": 0.002570694087403599,
+        "Spearman_Rho": 0.006454157999886044,
+        "Spearman_PValue": 0.7680253508686818,
+        "Divergent_Baseline_Top_Count": 49,
+        "Divergent_Pareto_Count": 339
+      }
+    ],
+    "variance_fallacy_rejected_features": [
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__ARG_37",
+        "PCA_Salience": 0.0107557343870086,
+        "ESS_Ratio": 0.0060848576830886,
+        "Occupancy_Entropy": 0.924522799513408,
+        "Uniqueness": 0.0204444171111042,
+        "SAM_MFP_Dominator_Count": 7.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__ASP_34",
+        "PCA_Salience": 0.0106350124397061,
+        "ESS_Ratio": 0.0059933256156258,
+        "Occupancy_Entropy": 0.9584947016764664,
+        "Uniqueness": 0.0382362575590643,
+        "SAM_MFP_Dominator_Count": 2.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__ASN_40",
+        "PCA_Salience": 0.0104925039819144,
+        "ESS_Ratio": 0.006187752828961,
+        "Occupancy_Entropy": 0.9398980382375106,
+        "Uniqueness": 0.0232905133226283,
+        "SAM_MFP_Dominator_Count": 6.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__VAL_33",
+        "PCA_Salience": 0.0103036034700827,
+        "ESS_Ratio": 0.0062499780970233,
+        "Occupancy_Entropy": 0.9447491768744268,
+        "Uniqueness": 0.0382362575590643,
+        "SAM_MFP_Dominator_Count": 3.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__PRO_35",
+        "PCA_Salience": 0.0102567124848942,
+        "ESS_Ratio": 0.006157641557714,
+        "Occupancy_Entropy": 0.9462761536234744,
+        "Uniqueness": 0.0425273146318286,
+        "SAM_MFP_Dominator_Count": 2.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__LEU_13__SYSTEM__THR_24",
+        "PCA_Salience": 0.0101719900132071,
+        "ESS_Ratio": 0.006663910919042,
+        "Occupancy_Entropy": 0.9076122507569108,
+        "Uniqueness": 0.0466800746700186,
+        "SAM_MFP_Dominator_Count": 3.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__SER_36",
+        "PCA_Salience": 0.0100486560462675,
+        "ESS_Ratio": 0.0065311428918892,
+        "Occupancy_Entropy": 0.9424261180340224,
+        "Uniqueness": 0.0462616375654093,
+        "SAM_MFP_Dominator_Count": 3.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__GLY_32",
+        "PCA_Salience": 0.0098968296486696,
+        "ESS_Ratio": 0.0063181709113872,
+        "Occupancy_Entropy": 0.9031981424626924,
+        "Uniqueness": 0.0405028226257057,
+        "SAM_MFP_Dominator_Count": 13.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_25__SYSTEM__GLY_32",
+        "PCA_Salience": 0.0096853978067593,
+        "ESS_Ratio": 0.0069100961713599,
+        "Occupancy_Entropy": 0.9196650030419676,
+        "Uniqueness": 0.0348080427020106,
+        "SAM_MFP_Dominator_Count": 11.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__GLU_14__SYSTEM__ALA_26",
+        "PCA_Salience": 0.0096055886686915,
+        "ESS_Ratio": 0.0071394834982109,
+        "Occupancy_Entropy": 0.9722889958070456,
+        "Uniqueness": 0.030336072084018,
+        "SAM_MFP_Dominator_Count": 1.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__PRO_62",
+        "PCA_Salience": 0.0096019026178679,
+        "ESS_Ratio": 0.0090236553981883,
+        "Occupancy_Entropy": 0.9588515496395572,
+        "Uniqueness": 0.0045789236447308,
+        "SAM_MFP_Dominator_Count": 2.0
+      },
+      {
+        "Feature": "CA_DISTANCE_angstrom__SYSTEM__ALA_26__SYSTEM__TRP_64",
+        "PCA_Salience": 0.0092521232113044,
+        "ESS_Ratio": 0.0102738493396867,
+        "Occupancy_Entropy": 0.9555360660168016,
+        "Uniqueness": 0.0042533020633255,
+        "SAM_MFP_Dominator_Count": 1.0
+      }
+    ],
+    "subtle_pareto_features": [
+      {
+        "Feature": "DSSP_sheet_fraction",
+        "Variance": 0.00026246711001985375,
+        "PCA_Salience": 0.0049044495783347,
+        "ESS_Ratio": 0.1456777121877869,
+        "Occupancy_Entropy": 0.3546703495471653,
+        "Uniqueness": 0.3651721469941752
+      },
+      {
+        "Feature": "GEOM_global_asphericity",
+        "Variance": 0.0015978381719415177,
+        "PCA_Salience": 0.0090454919035747,
+        "ESS_Ratio": 0.029156338351991,
+        "Occupancy_Entropy": 0.8839229797017101,
+        "Uniqueness": 0.2027408828862485
+      },
+      {
+        "Feature": "SIDECHAIN_chi1__segment_SYSTEM__PRO_17__cos",
+        "Variance": 0.003524948015441576,
+        "PCA_Salience": 0.0009616053861532,
+        "ESS_Ratio": 0.9494628479614342,
+        "Occupancy_Entropy": 0.9366083309081368,
+        "Uniqueness": 0.2248524112131028
+      },
+      {
+        "Feature": "SIDECHAIN_chi1__segment_SYSTEM__PRO_35__cos",
+        "Variance": 0.0039711948082545735,
+        "PCA_Salience": 0.000935915267631,
+        "ESS_Ratio": 0.9539176270745208,
+        "Occupancy_Entropy": 0.9466351353504444,
+        "Uniqueness": 0.2929068747267187
+      },
+      {
+        "Feature": "SIDECHAIN_chi1__segment_SYSTEM__PRO_30__cos",
+        "Variance": 0.004057745368351578,
+        "PCA_Salience": 0.0013859680898984,
+        "ESS_Ratio": 1.0,
+        "Occupancy_Entropy": 0.9465427339619724,
+        "Uniqueness": 0.1814244888561221
+      },
+      {
+        "Feature": "CA_CONTACT__SYSTEM__PRO_17__SYSTEM__HSD_41",
+        "Variance": 0.009904952476238118,
+        "PCA_Salience": 0.0011684132270253,
+        "ESS_Ratio": 1.0,
+        "Occupancy_Entropy": 0.026931045298637,
+        "Uniqueness": 0.6851999061323216
+      },
+      {
+        "Feature": "CA_CONTACT__SYSTEM__VAL_33__SYSTEM__SER_36",
+        "Variance": 0.010394947473736867,
+        "PCA_Salience": 0.0011330683200125,
+        "ESS_Ratio": 0.9302193573144254,
+        "Occupancy_Entropy": 0.0280299638647989,
+        "Uniqueness": 0.782876489231332
+      },
+      {
+        "Feature": "CA_CONTACT__SYSTEM__GLU_14__SYSTEM__LEU_42",
+        "Variance": 0.011373436718359177,
+        "PCA_Salience": 0.0010208309767794,
+        "ESS_Ratio": 0.885452345689274,
+        "Occupancy_Entropy": 0.0301935945763697,
+        "Uniqueness": 0.7855219441989891
+      },
+      {
+        "Feature": "CA_CONTACT__SYSTEM__LEU_18__SYSTEM__GLY_74",
+        "Variance": 0.012349924962481239,
+        "PCA_Salience": 0.0024295028368803,
+        "ESS_Ratio": 0.8797425361084206,
+        "Occupancy_Entropy": 0.032314868687491,
+        "Uniqueness": 0.6353824226301581
+      },
+      {
+        "Feature": "CA_CONTACT__SYSTEM__SER_36__SYSTEM__GLN_67",
+        "Variance": 0.012349924962481239,
+        "PCA_Salience": 0.0035466570628666,
+        "ESS_Ratio": 0.4556202779860441,
+        "Occupancy_Entropy": 0.032314868687491,
+        "Uniqueness": 0.6469611468280534
+      }
+    ],
+    "diagnostics_notes": [
+      "SAM-MFP candidates are Pareto trade-offs, not a scalar importance ranking.",
+      "Representation salience is target-free evidence, not causal or predictive importance.",
+      "Single trajectory available; evaluated Pareto candidates without cross-replica consistency.",
+      "Single trajectory available; evaluated Pareto candidates without cross-replica LOTO thresholding.",
+      "Cost was excluded because complete measured feature costs were not supplied."
+    ]
+  },
+  "ablation_study": [
+    {
+      "Ablation": "Full_Default_Objectives",
+      "Objectives": "ESS_Ratio,Occupancy_Entropy,Uniqueness,PCA_Salience,Representation_Stability",
+      "Eligible_Count": 2091,
+      "Pareto_Front_Size": 340,
+      "Overlap_With_Full_Pareto": 340,
+      "Jaccard_With_Full_Pareto": 1.0
+    },
+    {
+      "Ablation": "Ablate_Uniqueness",
+      "Objectives": "ESS_Ratio,Occupancy_Entropy,PCA_Salience,Representation_Stability",
+      "Eligible_Count": 2091,
+      "Pareto_Front_Size": 159,
+      "Overlap_With_Full_Pareto": 159,
+      "Jaccard_With_Full_Pareto": 0.4676470588235294
+    },
+    {
+      "Ablation": "Ablate_ESS_Ratio",
+      "Objectives": "Occupancy_Entropy,Uniqueness,PCA_Salience,Representation_Stability",
+      "Eligible_Count": 2091,
+      "Pareto_Front_Size": 92,
+      "Overlap_With_Full_Pareto": 92,
+      "Jaccard_With_Full_Pareto": 0.27058823529411763
+    },
+    {
+      "Ablation": "Ablate_Occupancy_Entropy",
+      "Objectives": "ESS_Ratio,Uniqueness,PCA_Salience,Representation_Stability",
+      "Eligible_Count": 2188,
+      "Pareto_Front_Size": 120,
+      "Overlap_With_Full_Pareto": 112,
+      "Jaccard_With_Full_Pareto": 0.3218390804597701
+    },
+    {
+      "Ablation": "Ablate_PCA_Salience",
+      "Objectives": "ESS_Ratio,Occupancy_Entropy,Uniqueness,Representation_Stability",
+      "Eligible_Count": 2091,
+      "Pareto_Front_Size": 4,
+      "Overlap_With_Full_Pareto": 4,
+      "Jaccard_With_Full_Pareto": 0.011764705882352941
+    },
+    {
+      "Ablation": "Salience_Only_Single_Objective",
+      "Objectives": "PCA_Salience",
+      "Eligible_Count": 2188,
+      "Pareto_Front_Size": 1,
+      "Overlap_With_Full_Pareto": 1,
+      "Jaccard_With_Full_Pareto": 0.0029411764705882353
+    }
+  ]
+}

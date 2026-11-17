@@ -1,0 +1,8 @@
+Method,Planted_Recall,Planted_Jaccard,Top_Features
+rf,1.0,1.0,"['feat_00', 'feat_01', 'feat_02']"
+dt,1.0,1.0,"['feat_00', 'feat_01', 'feat_02']"
+mi,1.0,1.0,"['feat_00', 'feat_02', 'feat_01']"
+permutation,1.0,1.0,"['feat_00', 'feat_01', 'feat_02']"
+variance,0.3333333333333333,0.2,"['feat_02', 'feat_15', 'feat_16']"
+random,0.3333333333333333,0.2,"['feat_05', 'feat_11', 'feat_02']"
+SAM-MFP (Pareto Front),1.0,1.0,"['feat_00', 'feat_02', 'feat_01']"

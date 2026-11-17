@@ -1,0 +1,7 @@
+Ablation,Objectives,Eligible_Count,Pareto_Front_Size,Overlap_With_Full_Pareto,Jaccard_With_Full_Pareto
+Full_Default_Objectives,"ESS_Ratio,Occupancy_Entropy,Uniqueness,PCA_Salience,Representation_Stability",2091,340,340,1.0
+Ablate_Uniqueness,"ESS_Ratio,Occupancy_Entropy,PCA_Salience,Representation_Stability",2091,159,159,0.4676470588235294
+Ablate_ESS_Ratio,"Occupancy_Entropy,Uniqueness,PCA_Salience,Representation_Stability",2091,92,92,0.27058823529411763
+Ablate_Occupancy_Entropy,"ESS_Ratio,Uniqueness,PCA_Salience,Representation_Stability",2188,120,112,0.3218390804597701
+Ablate_PCA_Salience,"ESS_Ratio,Occupancy_Entropy,Uniqueness,Representation_Stability",2091,4,4,0.011764705882352941
+Salience_Only_Single_Objective,PCA_Salience,2188,1,1,0.0029411764705882353
