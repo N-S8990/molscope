@@ -62,7 +62,36 @@ def discover_representation_features(
     metadata = manifest.reset_index(drop=True)
     trajectory_ids = pd.unique(metadata["trajectory_id"])
     if len(trajectory_ids) < 2:
-        raise ValueError("Representation stability requires at least two independent trajectories.")
+        import warnings
+        warnings.warn(
+            "Representation stability (LOTO) requires at least two independent trajectories. "
+            "Single trajectory provided: computing full-dataset PCA salience without cross-replica stability."
+        )
+        model, coordinates, salience = _salience(values, config.n_components)
+        full_ranks = rankdata(-salience, method="average")
+        salience_table = pd.DataFrame({
+            "Feature": values.columns,
+            "PCA_Salience": salience,
+            "PCA_Rank": full_ranks,
+            "LOTO_Rank_Median": full_ranks,
+            "LOTO_Rank_Std": np.nan,
+            "LOTO_Folds": 1,
+            "LOTO_Rank_Std_Normalized": 0.0,
+            "LOTO_Rank_Instability": 0.0,
+        }).sort_values(["PCA_Salience", "Feature"], ascending=[False, True]).reset_index(drop=True)
+        coordinate_table = metadata.copy()
+        for index in range(coordinates.shape[1]):
+            coordinate_table[f"PC{index + 1}"] = coordinates[:, index]
+        component_table = pd.DataFrame({
+            "Component": [f"PC{index + 1}" for index in range(len(model.explained_variance_ratio_))],
+            "Explained_Variance_Ratio": model.explained_variance_ratio_,
+        })
+        salience_table["Rank"] = salience_table.index + 1
+        return {
+            "representation_feature_salience": salience_table,
+            "representation_coordinates": coordinate_table,
+            "representation_components": component_table,
+        }
 
     model, coordinates, salience = _salience(values, config.n_components)
     full_ranks = rankdata(-salience, method="average")
