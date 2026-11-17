@@ -1,8 +1,10 @@
 """Bounded-batch summaries and sample-trained state discovery for chunk stores.
 
-This deliberately does not compute replica stability or SAM-MFP from one
-trajectory. All frames contribute to summaries and state populations; a seeded
-uniform reservoir supplies PCA and cluster training only.
+This supports bounded-memory summaries, sample-trained state discovery,
+and optional streaming-compatible SAM-MFP Pareto candidate selection with
+replica stability integration. All frames contribute to moments, ESS,
+and state separation; a seeded uniform reservoir supplies PCA and cluster
+training.
 """
 from __future__ import annotations
 
@@ -15,9 +17,17 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import rankdata
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+
+from molscope.analysis.prioritization.sam_mfp import SAMMFPConfig, prioritize_sam_mfp
+from molscope.analysis.quality.assessment import (
+    _maximum_spearman_correlation,
+    _occupancy_entropy,
+    _replica_consistency,
+)
 
 
 @dataclass(frozen=True)
@@ -28,12 +38,18 @@ class StreamAnalysisConfig:
     states: int = 2
     seed: int = 42
     memory_budget_mb: int = 512
+    compute_sam_mfp: bool = False
+    min_loto_folds: int = 2
+    max_autocorrelation_lag: int = 100
+    entropy_bins: int = 8
 
     def __post_init__(self):
-        for key in ("batch_rows", "sample_rows", "components", "states", "memory_budget_mb"):
+        for key in ("batch_rows", "sample_rows", "components", "states", "memory_budget_mb", "min_loto_folds", "max_autocorrelation_lag", "entropy_bins"):
             value = getattr(self, key)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{key} must be a positive integer")
+        if not isinstance(self.compute_sam_mfp, bool):
+            raise ValueError("compute_sam_mfp must be a boolean")
         if self.sample_rows < max(2, self.states):
             raise ValueError("sample_rows must be at least two and at least states")
         if isinstance(self.seed, bool) or not isinstance(self.seed, int) or not 0 <= self.seed < 2 ** 32:
@@ -63,6 +79,104 @@ class RunningMoments:
         self.count = total
 
 
+class StreamingAutocovariance:
+    """Bounded-memory lag-k autocovariance accumulator across batches with trajectory awareness."""
+    def __init__(self, width: int, max_lag: int, traj_moments: dict[str, RunningMoments]):
+        self.width = width
+        self.max_lag = max_lag
+        self.traj_moments = traj_moments
+        self.traj_data = {
+            t_id: {
+                "autocov": np.zeros((max_lag + 1, width), dtype=np.float64),
+                "counts": np.zeros(max_lag + 1, dtype=np.int64),
+                "prev_buffer": np.empty((0, width), dtype=np.float64),
+            }
+            for t_id in traj_moments
+        }
+        self.prev_traj = None
+
+    def update(self, values: np.ndarray, trajectory_ids: np.ndarray | None = None) -> None:
+        if not len(values):
+            return
+        if trajectory_ids is not None:
+            change_indices = np.where(trajectory_ids[:-1] != trajectory_ids[1:])[0] + 1
+            start = 0
+            for end in list(change_indices) + [len(values)]:
+                traj_slice = values[start:end]
+                traj_id = str(trajectory_ids[start])
+                self._update_slice(traj_slice, traj_id)
+                start = end
+        else:
+            default_id = next(iter(self.traj_moments.keys()), "default")
+            self._update_slice(values, default_id)
+
+    def _update_slice(self, raw_values: np.ndarray, traj_id: str) -> None:
+        if traj_id not in self.traj_data:
+            self.traj_data[traj_id] = {
+                "autocov": np.zeros((self.max_lag + 1, self.width), dtype=np.float64),
+                "counts": np.zeros(self.max_lag + 1, dtype=np.int64),
+                "prev_buffer": np.empty((0, self.width), dtype=np.float64),
+            }
+        mean = self.traj_moments[traj_id].mean if traj_id in self.traj_moments else raw_values.mean(axis=0)
+        centered = raw_values - mean
+        t_data = self.traj_data[traj_id]
+        n_prev = len(t_data["prev_buffer"])
+        n_curr = len(centered)
+        t_data["autocov"][0] += np.sum(centered ** 2, axis=0)
+        t_data["counts"][0] += n_curr
+        combined = np.vstack([t_data["prev_buffer"], centered]) if n_prev > 0 else centered
+        n_comb = len(combined)
+        for k in range(1, min(self.max_lag + 1, n_comb)):
+            i_start = max(0, n_prev - k)
+            i_end = n_comb - k
+            if i_end > i_start:
+                x_left = combined[i_start:i_end]
+                x_right = combined[i_start + k : i_end + k]
+                t_data["autocov"][k] += np.sum(x_left * x_right, axis=0)
+                t_data["counts"][k] += (i_end - i_start)
+        t_data["prev_buffer"] = combined[-self.max_lag:] if n_comb > self.max_lag else combined
+
+    def compute_ess(self, tolerance: float = 1e-12) -> tuple[np.ndarray, np.ndarray]:
+        """Compute median ESS and ESS ratio across trajectories."""
+        all_ess = []
+        all_lens = []
+        for t_id, t_mom in self.traj_moments.items():
+            n_sub = t_mom.count
+            if n_sub < 4:
+                continue
+            all_lens.append(n_sub)
+            t_data = self.traj_data[t_id]
+            denom = t_mom.m2
+            eff_max_lag = min(self.max_lag, n_sub // 2)
+            sub_ess = np.full(self.width, np.nan)
+            for j in range(self.width):
+                if denom[j] <= tolerance:
+                    continue
+                rhos = []
+                for k in range(1, eff_max_lag + 1):
+                    if t_data["counts"][k] == 0:
+                        break
+                    rho = t_data["autocov"][k, j] / denom[j]
+                    if rho <= 0:
+                        break
+                    rhos.append(float(rho))
+                it = 1.0 + 2.0 * sum(rhos)
+                sub_ess[j] = float(np.clip(n_sub / it, 1.0, float(n_sub)))
+            all_ess.append(sub_ess)
+
+        if not all_ess:
+            return np.full(self.width, np.nan), np.full(self.width, np.nan)
+
+        arr = np.asarray(all_ess)
+        all_nan = np.all(np.isnan(arr), axis=0)
+        med_ess = np.full(self.width, np.nan)
+        if not np.all(all_nan):
+            med_ess[~all_nan] = np.nanmedian(arr[:, ~all_nan], axis=0)
+        med_frames = float(np.median(all_lens)) if all_lens else 0.0
+        ess_ratio = np.where(med_frames > 0, med_ess / med_frames, np.nan)
+        return med_ess, ess_ratio
+
+
 class Reservoir:
     """Algorithm R uniform reservoir, deterministic regardless of batch sizes."""
     def __init__(self, capacity: int, width: int, seed: int):
@@ -70,17 +184,28 @@ class Reservoir:
         self.capacity = capacity
         self.seen = 0
         self.rng = np.random.default_rng(seed)
+        self.metadata: list[dict] = []
 
-    def update(self, values: np.ndarray) -> None:
-        for row in values:
+    def update(self, values: np.ndarray, metadata: list[dict] | None = None) -> None:
+        for i, row in enumerate(values):
             index = self.seen if self.seen < self.capacity else int(self.rng.integers(self.seen + 1))
             if index < self.capacity:
                 self.values[index] = row
+                if metadata is not None:
+                    if len(self.metadata) < self.capacity:
+                        self.metadata.append(metadata[i])
+                    else:
+                        self.metadata[index] = metadata[i]
             self.seen += 1
 
     @property
     def sample(self):
         return self.values[:min(self.seen, self.capacity)]
+
+    @property
+    def sample_metadata(self) -> list[dict]:
+        return self.metadata[:min(self.seen, self.capacity)]
+
 
 
 def _sha256(path: Path) -> str:
@@ -128,6 +253,27 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
         raise ValueError("Estimated analysis array workspace exceeds memory budget; reduce sample_rows, batch_rows, or feature selection")
     moments, reservoir = RunningMoments(width), Reservoir(config.sample_rows, width, config.seed)
 
+    default_identity = manifest.get("identity", {}) if isinstance(manifest.get("identity"), dict) else {}
+    if not default_identity and (source.parent / "identity.json").is_file():
+        try:
+            default_identity = json.loads((source.parent / "identity.json").read_text())
+        except Exception:
+            pass
+
+    def _extract_metadata(table: pd.DataFrame, n_rows: int) -> list[dict]:
+        has_traj = "trajectory_id" in table
+        has_rep = "replica_id" in table
+        has_ens = "ensemble_id" in table
+        t_id = default_identity.get("trajectory_id", "trajectory_0")
+        r_id = default_identity.get("replica_id", "replica_0")
+        e_id = default_identity.get("ensemble_id", "ensemble_0")
+        if has_traj or has_rep or has_ens:
+            t_col = table["trajectory_id"].tolist() if has_traj else [t_id] * n_rows
+            r_col = table["replica_id"].tolist() if has_rep else [r_id] * n_rows
+            e_col = table["ensemble_id"].tolist() if has_ens else [e_id] * n_rows
+            return [{"trajectory_id": t, "replica_id": r, "ensemble_id": e} for t, r, e in zip(t_col, r_col, e_col)]
+        return [{"trajectory_id": t_id, "replica_id": r_id, "ensemble_id": e_id}] * n_rows
+
     def batches():
         for path, expected_hash in chunks:
             if _sha256(path) != expected_hash:
@@ -140,9 +286,18 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
                     raise ValueError("Nonfinite features found; streaming analysis does not impute unavailable values")
                 yield table, values
 
-    for _, values in batches():
+    traj_moments: dict[str, RunningMoments] = {}
+    for table, values in batches():
+        batch_meta = _extract_metadata(table, len(values))
+        if config.compute_sam_mfp:
+            traj_ids = [m["trajectory_id"] for m in batch_meta]
+            for t_id in dict.fromkeys(traj_ids):
+                if t_id not in traj_moments:
+                    traj_moments[t_id] = RunningMoments(width)
+                t_mask = [t == t_id for t in traj_ids]
+                traj_moments[t_id].update(values[t_mask])
         moments.update(values)
-        reservoir.update(values)
+        reservoir.update(values, batch_meta)
     if "total_rows" in manifest and manifest["total_rows"] != moments.count:
         raise ValueError("Manifest total_rows does not match committed chunks")
     if moments.count < max(2, config.states):
@@ -167,11 +322,21 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
              pca_explained_variance_ratio=pca.explained_variance_ratio_,
              cluster_centers=model.cluster_centers_)
     counts = np.zeros(config.states, dtype=np.int64)
+    state_sums = np.zeros((config.states, width), dtype=np.float64)
+    autocov_tracker = StreamingAutocovariance(width, config.max_autocorrelation_lag, traj_moments) if config.compute_sam_mfp else None
     assignment_files = []
     for batch_index, (table, values) in enumerate(batches()):
         coordinates = pca.transform(scaler.transform(values[:, active]))
         labels = model.predict(coordinates)
         counts += np.bincount(labels, minlength=config.states)
+        if config.compute_sam_mfp:
+            batch_meta = _extract_metadata(table, len(values))
+            traj_ids = np.array([m["trajectory_id"] for m in batch_meta])
+            autocov_tracker.update(values, traj_ids)
+            for k in range(config.states):
+                k_mask = (labels == k)
+                if np.any(k_mask):
+                    state_sums[k] += values[k_mask].sum(axis=0)
         identities = table.drop(columns=columns).copy()
         identities["State"] = labels
         for component in range(components):
@@ -194,16 +359,148 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
     axis.set(xlabel="Sample-trained candidate state", ylabel="Fraction of all analyzed frames",
              title="Descriptive state populations")
     figure.tight_layout(); figure.savefig(destination / "state_populations.png", dpi=160); plt.close(figure)
-    report = {"status": "completed", "scope": "sample-trained descriptive state discovery",
+
+    sam_mfp_report = {}
+    sam_candidates = None
+    if config.compute_sam_mfp:
+        ess, ess_ratio = autocov_tracker.compute_ess()
+        entropy = np.array([_occupancy_entropy(sample[:, j], bins=config.entropy_bins, tolerance=1e-12) for j in range(width)])
+
+        valid_fraction = np.ones(width, dtype=float)
+        resolution = np.where(active, "frame", "trajectory")
+
+        frame_indices = np.where(active)[0]
+        uniqueness = np.full(width, np.nan)
+        if len(frame_indices) > 0:
+            frame_sample_df = pd.DataFrame(sample[:, frame_indices], columns=[columns[i] for i in frame_indices])
+            max_corr = _maximum_spearman_correlation(frame_sample_df, max_rows=config.sample_rows)
+            for i, col_name in enumerate([columns[k] for k in frame_indices]):
+                uniqueness[frame_indices[i]] = 1.0 - max_corr[col_name]
+
+        raw_meta = reservoir.sample_metadata
+        meta_df = pd.DataFrame(raw_meta) if raw_meta else pd.DataFrame({
+            "trajectory_id": ["trajectory_0"] * len(sample),
+            "replica_id": ["replica_0"] * len(sample),
+            "ensemble_id": ["ensemble_0"] * len(sample),
+        })
+        has_multi_trajs = len(pd.unique(meta_df["trajectory_id"])) >= 2
+
+        if has_multi_trajs:
+            replica_consistency = np.array([_replica_consistency(sample[:, j], meta_df, tolerance=1e-12) for j in range(width)])
+        else:
+            replica_consistency = np.full(width, np.nan)
+
+        pca_salience = np.full(width, np.nan)
+        pca_salience[active] = np.abs(pca.components_).T @ pca.explained_variance_ratio_
+        pca_ranks = np.full(width, np.nan)
+        pca_ranks[active] = rankdata(-pca_salience[active], method="average")
+
+        loto_std = np.full(width, np.nan)
+        loto_norm = np.full(width, np.nan)
+        loto_folds = np.zeros(width, dtype=int)
+        loto_med = np.full(width, np.nan)
+
+        if has_multi_trajs:
+            unique_trajs = pd.unique(meta_df["trajectory_id"])
+            fold_ranks = []
+            for t_id in unique_trajs:
+                train_mask = (meta_df["trajectory_id"] != t_id).to_numpy()
+                if train_mask.sum() >= 2:
+                    train_sample = sample[train_mask][:, active]
+                    train_scaled = StandardScaler().fit_transform(train_sample)
+                    k_comp = min(config.components, train_scaled.shape[0] - 1, train_scaled.shape[1])
+                    if k_comp >= 1:
+                        f_pca = PCA(n_components=k_comp, svd_solver="full").fit(train_scaled)
+                        f_sal = np.abs(f_pca.components_).T @ f_pca.explained_variance_ratio_
+                        fold_ranks.append(rankdata(-f_sal, method="average"))
+            if len(fold_ranks) >= 2:
+                r_arr = np.asarray(fold_ranks, dtype=float)
+                loto_std_active = np.std(r_arr, axis=0, ddof=1)
+                loto_std[active] = loto_std_active
+                loto_norm[active] = loto_std_active / max(1, int(active.sum()) - 1)
+                loto_folds[active] = len(fold_ranks)
+                loto_med[active] = np.median(r_arr, axis=0)
+            else:
+                loto_folds[active] = len(fold_ranks) if fold_ranks else 1
+                loto_norm[active] = 0.0
+                loto_med[active] = pca_ranks[active]
+        else:
+            loto_folds[active] = 1
+            loto_norm[active] = 0.0
+            loto_med[active] = pca_ranks[active]
+
+        between = np.zeros(width, dtype=float)
+        for k in range(config.states):
+            mean_k = state_sums[k] / max(1, counts[k])
+            between += counts[k] * (mean_k - moments.mean) ** 2
+        with np.errstate(divide="ignore", invalid="ignore"):
+            eta_squared = np.where(active, np.where(moments.m2 > 1e-12, between / np.maximum(1e-12, moments.m2), 0.0), np.nan)
+
+        quality_df = pd.DataFrame({
+            "Feature": columns,
+            "Valid_Fraction": valid_fraction,
+            "Resolution": resolution,
+            "Median_ESS": ess,
+            "ESS_Ratio": ess_ratio,
+            "Replica_Consistency": replica_consistency,
+            "Occupancy_Entropy": entropy,
+            "Uniqueness": uniqueness,
+        })
+        salience_df = pd.DataFrame({
+            "Feature": columns,
+            "PCA_Salience": pca_salience,
+            "PCA_Rank": pca_ranks,
+            "LOTO_Rank_Median": loto_med,
+            "LOTO_Rank_Std": loto_std,
+            "LOTO_Folds": loto_folds,
+            "LOTO_Rank_Std_Normalized": loto_norm,
+        })
+        state_exp_df = pd.DataFrame({
+            "Feature": columns,
+            "State_Explained_Variance_Eta_Squared": eta_squared,
+        })
+
+        sam_config = SAMMFPConfig(min_loto_folds=config.min_loto_folds, include_state_separation=True)
+        sam_candidates, sam_notes = prioritize_sam_mfp(quality_df, salience_df, sam_config, state_explanatory=state_exp_df)
+
+        sam_candidates.to_csv(destination / "sam_mfp_candidates.csv", index=False)
+        quality_df.to_csv(destination / "feature_quality.csv", index=False)
+        salience_df.to_csv(destination / "representation_salience.csv", index=False)
+        state_exp_df.to_csv(destination / "state_explanatory_ranking.csv", index=False)
+
+        sam_mfp_report = {
+            "sam_mfp_candidate_count": int(sam_candidates["SAM_MFP_Pareto_Front"].sum()),
+            "sam_mfp_candidates": sam_candidates.loc[sam_candidates["SAM_MFP_Pareto_Front"], "Feature"].tolist(),
+            "sam_mfp_objectives": sam_candidates["SAM_MFP_Objectives"].iloc[0] if not sam_candidates.empty else "",
+            "sam_mfp_notes": sam_notes,
+        }
+
+    if config.compute_sam_mfp:
+        limitations = [
+            "PCA, clustering, uniqueness and occupancy entropy are fitted on a seeded uniform reservoir sample.",
+            "ESS ratio and candidate state separation (ANOVA eta-squared) cover all analyzed frames.",
+            "Target-free SAM-MFP Pareto candidates were evaluated in bounded memory.",
+            "Array budget is an estimate, not a hard process memory cap.",
+            "Million-frame capacity has not been validated by this run unless its recorded frame count reaches that size.",
+        ]
+        if not has_multi_trajs:
+            limitations.append("Single trajectory provided: evaluated Pareto candidates without cross-replica LOTO thresholding.")
+    else:
+        limitations = [
+            "PCA and clustering are fitted to a seeded uniform reservoir sample.",
+            "States are descriptive hypotheses; no replica stability or SAM-MFP was computed.",
+            "Array budget is an estimate, not a hard process memory cap.",
+            "Million-frame capacity has not been validated by this run unless its recorded frame count reaches that size.",
+        ]
+
+    report = {"status": "completed", "scope": "sample-trained descriptive state discovery" if not config.compute_sam_mfp else "sample-trained descriptive discovery with bounded-memory SAM-MFP candidate selection",
               "configuration": asdict(config), "frames_analyzed": moments.count,
               "training_sample_rows": len(sample), "feature_count": width,
               "active_feature_count": int(active.sum()), "estimated_array_workspace_bytes": estimate,
               "assignment_files": assignment_files,
               "source_chunks": [{"file": str(path), "sha256": digest} for path, digest in chunks],
-              "limitations": ["PCA and clustering are fitted to a seeded uniform reservoir sample.",
-                              "States are descriptive hypotheses; no replica stability or SAM-MFP was computed.",
-                              "Array budget is an estimate, not a hard process memory cap.",
-                              "Million-frame capacity has not been validated by this run unless its recorded frame count reaches that size."]}
+              **sam_mfp_report,
+              "limitations": limitations}
     state_rows = [{"state": int(i), "frames": int(count), "fraction": float(count / moments.count)}
                   for i, count in enumerate(counts)]
     state_rows.sort(key=lambda row: row["frames"], reverse=True)
@@ -221,6 +518,23 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
                  if largest_state else "No candidate states were assigned.")
     report["largest_candidate_state"] = largest_state
     report["top_variable_features_by_sample_standard_deviation"] = variable["Feature"].astype(str).tolist()
+
+    sam_html = ""
+    if config.compute_sam_mfp and sam_candidates is not None:
+        cand_rows = "".join(
+            f"<tr><td>{html.escape(str(r.Feature))}</td><td>{'Yes (Pareto)' if r.SAM_MFP_Pareto_Front else 'Dominated'}</td>"
+            f"<td>{int(r.SAM_MFP_Dominator_Count)}</td><td>{r.PCA_Salience:.4g}</td><td>{r.ESS_Ratio:.4g}</td>"
+            f"<td>{r.Occupancy_Entropy:.4g}</td><td>{r.Uniqueness:.4g}</td></tr>"
+            for r in sam_candidates.head(15).itertuples(index=False)
+        )
+        sam_html = f"""
+      <section id='sam_mfp'><h2>SAM-MFP Multi-Criteria Prioritization</h2>
+      <p>Target-free Pareto candidate features balancing representation salience, sampling efficiency (ESS), occupancy entropy, and uniqueness in bounded memory.</p>
+      <table><thead><tr><th>Feature</th><th>Pareto Front</th><th>Dominators</th><th>PCA Salience</th><th>ESS Ratio</th><th>Entropy</th><th>Uniqueness</th></tr></thead>
+      <tbody>{cand_rows}</tbody></table>
+      <p><a href='sam_mfp_candidates.csv'>Download complete SAM-MFP Pareto candidates (CSV)</a> · <a href='feature_quality.csv'>Feature quality metrics (CSV)</a></p></section>
+        """
+
     css = """
       :root{color-scheme:light;--ink:#17212b;--muted:#586777;--line:#d9e1e8;--blue:#245b78;--paper:#fff;--wash:#f3f7fa}
       *{box-sizing:border-box}body{margin:0;background:var(--wash);color:var(--ink);font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
@@ -233,11 +547,12 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
       nav a{color:var(--blue);text-decoration:none;margin-right:16px}footer{font-size:12px;color:var(--muted);padding:20px 4px}
       @media(max-width:680px){main{margin:18px auto;padding:0 12px 30px}.cards{grid-template-columns:1fr}header,section{padding:18px}table{font-size:12px}th,td{padding:7px 5px}}
     """
+    scope_note = "This run performs sample-trained descriptive discovery with bounded-memory SAM-MFP candidate selection." if config.compute_sam_mfp else "This run performs sample-trained descriptive state discovery. It does not calculate replica stability, SAM-MFP prioritization, supervised prediction, or kinetic rates."
     text = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
       <title>MolScope | Streaming analysis</title><style>{css}</style></head><body><main>
       <header><div class='eyebrow'>MolScope · descriptive analysis</div><h1>Streaming trajectory report</h1>
       <p>State discovery was fitted on a reproducible sample and applied to all analyzed frames.</p>
-      <nav><a href='#results'>Results</a><a href='#features'>Variable features</a><a href='#methods'>Scope and methods</a><a href='analysis_summary.json'>Full analysis record</a></nav></header>
+      <nav><a href='#results'>Results</a><a href='#features'>Variable features</a>{'<a href="#sam_mfp">SAM-MFP</a>' if config.compute_sam_mfp else ''}<a href='#methods'>Scope and methods</a><a href='analysis_summary.json'>Full analysis record</a></nav></header>
       <div class='cards'><div class='card'><div class='metric'>{moments.count:,}</div><div class='label'>frames analyzed</div></div>
       <div class='card'><div class='metric'>{width:,}</div><div class='label'>measured feature columns</div></div>
       <div class='card'><div class='metric'>{len(sample):,}</div><div class='label'>frames used to fit PCA and clustering</div></div></div>
@@ -248,7 +563,8 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
       <section id='features'><h2>Most variable measured features</h2><p>Sorted by standard deviation in the training sample. Units remain those of the extracted feature.</p>
       <table><thead><tr><th>Feature</th><th>Mean</th><th>Std. dev.</th><th>Minimum</th><th>Maximum</th></tr></thead><tbody>{feature_rows}</tbody></table>
       <p><a href='feature_summary.csv'>Download complete feature summary</a></p></section>
-      <section id='methods'><h2>Scope and interpretation</h2><p class='note'>This run performs sample-trained descriptive state discovery. It does not calculate replica stability, SAM-MFP prioritization, supervised prediction, or kinetic rates.</p>
+      {sam_html}
+      <section id='methods'><h2>Scope and interpretation</h2><p class='note'>{scope_note}</p>
       <h3>Method and resource record</h3><table><tbody><tr><th>Training sample</th><td>{len(sample):,} uniformly reservoir-sampled frames; seed {config.seed}</td></tr>
       <tr><th>Representation</th><td>Standard scaling followed by {components}-component PCA on {int(active.sum()):,} variable features</td></tr>
       <tr><th>Clustering</th><td>K-means with {config.states} requested states; 10 initializations</td></tr>
@@ -256,6 +572,12 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
       <h3>Limitations</h3><ul>{''.join(f'<li>{html.escape(line)}</li>' for line in report['limitations'])}</ul>
       <p><a href='state_populations.csv'>State population data</a> · <a href='feature_summary.csv'>Feature summary data</a> · <a href='analysis_summary.json'>Chunk hashes and complete provenance</a></p></section>
       <footer>MolScope streaming analysis · {moments.count:,} frames processed</footer></main></body></html>"""
+    (destination / "report.html").write_text(text, encoding="utf-8")
+    # Commit the completed marker only after every artifact has been written.
+    pending = destination / "analysis_summary.json.tmp"
+    pending.write_text(json.dumps(report, indent=2) + "\n")
+    pending.replace(destination / "analysis_summary.json")
+    return report
     (destination / "report.html").write_text(text, encoding="utf-8")
     # Commit the completed marker only after every artifact has been written.
     pending = destination / "analysis_summary.json.tmp"
@@ -270,10 +592,16 @@ def main():
     parser.add_argument("--out-dir", required=True)
     for name, default in (("batch-rows", 512), ("sample-rows", 2000), ("components", 3), ("states", 2), ("seed", 42), ("memory-budget-mb", 512)):
         parser.add_argument(f"--{name}", type=int, default=default)
+    parser.add_argument("--sam-mfp", action="store_true", default=False, help="Compute bounded-memory SAM-MFP Pareto candidates")
+    parser.add_argument("--min-loto-folds", type=int, default=2, help="Minimum LOTO folds for cross-replica stability")
+    parser.add_argument("--max-autocorrelation-lag", type=int, default=100, help="Maximum lag for online ESS autocorrelation")
+    parser.add_argument("--entropy-bins", type=int, default=8, help="Number of histogram bins for occupancy entropy")
     args = parser.parse_args()
     report = analyze_stream(args.source, args.out_dir, StreamAnalysisConfig(
         batch_rows=args.batch_rows, sample_rows=args.sample_rows, components=args.components,
-        states=args.states, seed=args.seed, memory_budget_mb=args.memory_budget_mb))
+        states=args.states, seed=args.seed, memory_budget_mb=args.memory_budget_mb,
+        compute_sam_mfp=args.sam_mfp, min_loto_folds=args.min_loto_folds,
+        max_autocorrelation_lag=args.max_autocorrelation_lag, entropy_bins=args.entropy_bins))
     print(json.dumps({"status": report["status"], "frames_analyzed": report["frames_analyzed"]}))
 
 
