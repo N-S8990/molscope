@@ -36,18 +36,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install ".[test,dssp,parquet]"
-          python -m pip install coverage pytest-cov
+          python -m pip install coverage pytest-cov flake8
 
       - name: Install dependencies (minimal base)
         if: ${{ !matrix.include-extras }}
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install ".[test]"
-          python -m pip install coverage pytest-cov
+          python -m pip install coverage pytest-cov flake8
 
       - name: Byte-compile verification
         run: |
           python -m compileall -q src/molscope
+
+      - name: Lint and syntax checks
+        run: |
+          flake8 src/molscope tests --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Run test suite with coverage
         run: |
