@@ -2,6 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from molscope.reporting import ReportInputs, build_research_report, render_report_figures
@@ -44,6 +45,22 @@ class ReportingTests(unittest.TestCase):
             )
             self.assertEqual(set(paths), {"sam_mfp_tradeoff.png", "state_populations.png"})
             self.assertTrue((Path(temporary) / "sam_mfp_tradeoff.png").is_file())
+
+    def test_writes_sam_mfp_tradeoff_with_ess_ratio_fallback_when_replica_consistency_is_all_nan(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            sam_mfp = pd.DataFrame({
+                "Feature": ["f1", "f2", "f3"],
+                "PCA_Salience": [0.1, 0.4, 0.8],
+                "Replica_Consistency": [np.nan, np.nan, np.nan],
+                "ESS_Ratio": [0.2, 0.5, 0.9],
+                "SAM_MFP_Pareto_Front": [False, True, True],
+                "SAM_MFP_Eligible": [True, True, True],
+            })
+            paths = render_report_figures(sam_mfp, None, temporary)
+            self.assertIn("sam_mfp_tradeoff.png", paths)
+            plot_file = Path(temporary) / "sam_mfp_tradeoff.png"
+            self.assertTrue(plot_file.is_file())
+            self.assertGreater(plot_file.stat().st_size, 1000)
 
     def test_writes_quality_and_representation_figures_when_tables_are_supplied(self):
         with tempfile.TemporaryDirectory() as temporary:
