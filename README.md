@@ -6,13 +6,17 @@ evidence those measurements provide. It combines explicit system profiling,
 feature quality checks, target-free state discovery, and SAM-MFP Pareto
 prioritization in a configurable project workflow.
 
+The retained GPR6 study result, its status, and the remaining publication
+gates are in [CURRENT_STATUS.md](CURRENT_STATUS.md).
+
 ```text
 project.json → validate and profile → extract applicable features
              → assess quality and discover states
              → prioritize candidate measurements → report
 ```
 
-Predictive models run only when a project declares a valid target. Their
+Predictive models run automatically when a project declares one unambiguous valid
+target through a prediction task or complete categorical trajectory label. Their
 rankings are reported separately from descriptive state explanations and
 SAM-MFP's Pareto candidates. Unavailable features carry applicability status
 and reasons; they are not silently filled with zeroes.
@@ -29,8 +33,8 @@ and reasons; they are not silently filled with zeroes.
   classifier.
 - Report feature quality and run target-free PCA and conformational-state
   discovery, then present SAM-MFP Pareto candidates.
-- Optionally run grouped predictive ML and predictive feature rankings when
-  researchers supply declared trajectory-level labels.
+- Automatically run grouped predictive ML and predictive feature rankings when
+  researchers supply one valid declared trajectory-level target.
 - Generate reviewed OpenMM plans and, with OpenMM/PDBFixer installed, execute
   simulations with checkpoints and recovery into recorded trajectory segments.
 - Stream a limited feature subset to checksummed chunks, resume interrupted
