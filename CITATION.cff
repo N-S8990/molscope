@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use MolScope in your research, please cite it as below."
 authors:
-  - family-names: "Soni"
+  - family-names: "Sayanja"
     given-names: "Nirav"
 title: "MolScope: System-Aware Molecular-Dynamics Feature Discovery and Prioritization"
 version: 0.2.0
