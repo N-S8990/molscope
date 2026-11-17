@@ -19,16 +19,21 @@ from molscope.core.contracts import ApplicabilityStatus, FeatureAssessment, Feat
 from molscope.profiling.system import SystemProfile, discover_component_selections, profile_system
 
 from molscope.features.base import PluginResult, FeaturePlugin, _safe_id
-from molscope.features.protein.plugins import ProteinBackboneTorsionPlugin, ProteinCADistanceContactPlugin, ProteinDSSPPlugin, ProteinSaltBridgePlugin, ProteinHydrophobicContactPlugin, ProteinHydrogenBondPlugin, ProteinAromaticStackingPlugin, ProteinContactNetworkPlugin
+from molscope.features.protein.plugins import ProteinBackboneTorsionPlugin, ProteinCADistanceContactPlugin, ProteinResidueHeavyDistancePlugin, ProteinSidechainTorsionPlugin, ProteinDSSPPlugin, ProteinSaltBridgePlugin, ProteinHydrophobicContactPlugin, ProteinHydrogenBondPlugin, ProteinAromaticStackingPlugin, ProteinContactNetworkPlugin
 from molscope.features.ligand.plugins import ProteinLigandContactPlugin
+from molscope.features.ligand.plif import ProteinLigandInteractionFingerprintPlugin
 from molscope.features.environment.plugins import SASAPlugin, SolvationShellPlugin, MolecularDipolePlugin
 from molscope.features.nucleic_acid.plugins import NucleicAcidBaseProximityPlugin
+from molscope.features.coordinates import SelectedCoordinatePlugin
 
 PLUGIN_REGISTRY: dict[str, FeaturePlugin] = {
     ProteinBackboneTorsionPlugin.plugin_id: ProteinBackboneTorsionPlugin(),
     ProteinCADistanceContactPlugin.plugin_id: ProteinCADistanceContactPlugin(),
+    ProteinResidueHeavyDistancePlugin.plugin_id: ProteinResidueHeavyDistancePlugin(),
+    ProteinSidechainTorsionPlugin.plugin_id: ProteinSidechainTorsionPlugin(),
     ProteinDSSPPlugin.plugin_id: ProteinDSSPPlugin(),
     ProteinLigandContactPlugin.plugin_id: ProteinLigandContactPlugin(),
+    ProteinLigandInteractionFingerprintPlugin.plugin_id: ProteinLigandInteractionFingerprintPlugin(),
     ProteinSaltBridgePlugin.plugin_id: ProteinSaltBridgePlugin(),
     ProteinHydrophobicContactPlugin.plugin_id: ProteinHydrophobicContactPlugin(),
     SASAPlugin.plugin_id: SASAPlugin(),
@@ -38,6 +43,7 @@ PLUGIN_REGISTRY: dict[str, FeaturePlugin] = {
     MolecularDipolePlugin.plugin_id: MolecularDipolePlugin(),
     ProteinContactNetworkPlugin.plugin_id: ProteinContactNetworkPlugin(),
     NucleicAcidBaseProximityPlugin.plugin_id: NucleicAcidBaseProximityPlugin(),
+    SelectedCoordinatePlugin.plugin_id: SelectedCoordinatePlugin(),
 }
 
 
