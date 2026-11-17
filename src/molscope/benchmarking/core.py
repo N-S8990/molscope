@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 
@@ -173,6 +174,11 @@ def _normalize_metrics(method: BenchmarkMethod, metric_ids: set[str]) -> pd.Data
     if unknown:
         raise ValueError(f"Results CSV for {method.method_id!r} reports undeclared metrics: {unknown}")
     normalized["value"] = pd.to_numeric(normalized["value"], errors="raise")
+    if not np.isfinite(normalized["value"].to_numpy(dtype=float)).all():
+        raise ValueError(f"Results CSV for {method.method_id!r} contains non-finite metric values.")
+    identity_columns = ["metric_id", "subset"] if "subset" in normalized else ["metric_id"]
+    if normalized.duplicated(identity_columns).any():
+        raise ValueError(f"Results CSV for {method.method_id!r} contains duplicate metric rows.")
     normalized.insert(0, "method_id", method.method_id)
     normalized.insert(1, "method_label", method.label)
     return normalized
