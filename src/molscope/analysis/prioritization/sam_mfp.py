@@ -141,7 +141,10 @@ def prioritize_sam_mfp(
     if salience_col in objective_columns:
         base_eligible = base_eligible & table[salience_col].notna()
     if "Representation_Stability" in objective_columns and "LOTO_Folds" in table.columns:
-        base_eligible = base_eligible & table["LOTO_Folds"].ge(config.min_loto_folds)
+        if table["LOTO_Folds"].max() >= config.min_loto_folds:
+            base_eligible = base_eligible & table["LOTO_Folds"].ge(config.min_loto_folds)
+        else:
+            notes.append("Single trajectory available; evaluated Pareto candidates without cross-replica LOTO thresholding.")
     base_eligible = base_eligible & table[objective_columns].notna().all(axis=1)
 
     # Cost objective
