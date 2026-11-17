@@ -10,6 +10,7 @@ import sys
 
 COMMANDS = {
     'run': ('molscope.cli.run_project', 'Run the configured full project workflow'),
+    'run-pdb': ('molscope.cli.run_pdb', 'Run end-to-end 3-stage PDB: simulation -> clustering -> ML feature ranking'),
     'validate': ('molscope.cli.validate_inputs', 'Validate topology and trajectory inputs'),
     'profile': ('molscope.cli.inspect_system', 'Inspect molecular capabilities and feature applicability'),
     'plan': ('molscope.cli.generate_openmm_plan', 'Generate an OpenMM execution plan'),
