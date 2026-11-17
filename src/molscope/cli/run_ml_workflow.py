@@ -64,7 +64,7 @@ def main() -> None:
         table.to_csv(out_dir / f"{name}.csv", index=False)
     if "lofo_importance" in outputs:
         _plot_lofo(outputs["lofo_importance"], out_dir / "lofo_trajectory_accuracy_drop.png")
-    report = {"target_column": args.target_column, "configuration": {"random_state": args.seed, "folds": args.folds, "rf_estimators": args.rf_estimators, "bootstrap_samples": args.bootstrap_samples}, "notes": ["Outer splits are trajectory-grouped.", "LOFO ranking uses trajectory-mean accuracy drop as the primary endpoint.", "Accuracy drops show predictive dependence, not causal mechanism."]}
+    report = {"target_column": args.target_column, "configuration": {"random_state": args.seed, "folds": args.folds, "rf_estimators": args.rf_estimators, "bootstrap_samples": args.bootstrap_samples}, "notes": ["Outer splits are trajectory-grouped.", "Training gives every independent trajectory equal total sample weight, regardless of its frame count.", "out_of_fold_predictions.csv contains every held-out frame prediction for model review.", "LOFO ranking uses trajectory-mean accuracy drop as the primary endpoint.", "Accuracy drops show predictive dependence, not causal mechanism."]}
     (out_dir / "ml_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote ML results to {out_dir}")
 
