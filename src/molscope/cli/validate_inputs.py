@@ -19,6 +19,8 @@ def main() -> None:
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--checksum", action="store_true", help="Record SHA-256 digests; can be slow for large files.")
     parser.add_argument("--include-identities", action="store_true", help="Include atom and residue identity tables in JSON output.")
+    parser.add_argument("--require-imaged", action="store_true", help="Treat wrapped or un-imaged coordinates across PBC as fatal errors.")
+    parser.add_argument("--no-pbc-check", action="store_true", help="Skip explicit coordinate wrapping and imaging checks.")
     parser.add_argument("--output", default=None, help="Write JSON to this path instead of stdout.")
     args = parser.parse_args()
 
@@ -28,6 +30,8 @@ def main() -> None:
         frame_stride=args.frame_stride,
         max_frames=args.max_frames,
         include_checksum=args.checksum,
+        check_pbc_wrapping=not args.no_pbc_check,
+        require_imaged=args.require_imaged,
     )
     rendered = json.dumps(report.to_dict(include_identities=args.include_identities), indent=2, sort_keys=True)
     if args.output:
