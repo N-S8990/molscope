@@ -273,6 +273,68 @@ def compute_permutation_importance(
     return df
 
 
+def compute_variance_importance(
+    X: pd.DataFrame | np.ndarray,
+    *,
+    feature_names: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Compute empirical feature variance baseline.
+
+    Parameters
+    ----------
+    X : pd.DataFrame or np.ndarray of shape (n_samples, n_features)
+        Input feature matrix.
+    feature_names : list of str, optional
+        Feature names if X is ndarray.
+
+    Returns
+    -------
+    pd.DataFrame
+        Table containing 'Feature', 'Variance', and 'Variance_Rank', sorted descending.
+    """
+    X_mat, names = _extract_feature_matrix_and_names(X, feature_names)
+    variances = np.var(X_mat, axis=0, ddof=1) if X_mat.shape[0] > 1 else np.zeros(X_mat.shape[1])
+    df = pd.DataFrame({
+        "Feature": names,
+        "Variance": variances,
+    }).sort_values(["Variance", "Feature"], ascending=[False, True]).reset_index(drop=True)
+    df["Variance_Rank"] = df.index + 1
+    return df
+
+
+def compute_random_ranking(
+    X: pd.DataFrame | np.ndarray,
+    *,
+    random_state: int = 42,
+    feature_names: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Compute random ranking baseline for null-hypothesis benchmarking.
+
+    Parameters
+    ----------
+    X : pd.DataFrame or np.ndarray of shape (n_samples, n_features)
+        Input feature matrix.
+    random_state : int, default=42
+        Random seed for reproducibility.
+    feature_names : list of str, optional
+        Feature names if X is ndarray.
+
+    Returns
+    -------
+    pd.DataFrame
+        Table containing 'Feature', 'Random_Score', and 'Random_Rank'.
+    """
+    _, names = _extract_feature_matrix_and_names(X, feature_names)
+    rng = np.random.default_rng(random_state)
+    scores = rng.uniform(0.0, 1.0, size=len(names))
+    df = pd.DataFrame({
+        "Feature": names,
+        "Random_Score": scores,
+    }).sort_values(["Random_Score", "Feature"], ascending=[False, True]).reset_index(drop=True)
+    df["Random_Rank"] = df.index + 1
+    return df
+
+
 def compare_prioritization(
     sam_mfp_df: pd.DataFrame,
     baseline_df: pd.DataFrame,
@@ -326,6 +388,8 @@ def compare_prioritization(
         "Mutual_Info",
         "Permutation_Importance_Mean",
         "DT_Importance",
+        "Variance",
+        "Random_Score",
         "Baseline_Score",
         "Importance",
         "Score",
@@ -347,7 +411,16 @@ def compare_prioritization(
                 raise ValueError("Could not auto-detect a baseline score column in baseline_df.")
 
     # Auto-detect rank column
-    candidate_rank_cols = ["RF_Rank", "MI_Rank", "Permutation_Rank", "DT_Rank", "Baseline_Rank", "Rank"]
+    candidate_rank_cols = [
+        "RF_Rank",
+        "MI_Rank",
+        "Permutation_Rank",
+        "DT_Rank",
+        "Variance_Rank",
+        "Random_Rank",
+        "Baseline_Rank",
+        "Rank",
+    ]
     if baseline_rank_col is None:
         for col in candidate_rank_cols:
             if col in baseline_df.columns:
@@ -453,7 +526,7 @@ def compare_prioritization(
 def compare_sam_mfp_with_baselines(
     sam_mfp_df: pd.DataFrame,
     X: pd.DataFrame | np.ndarray,
-    y: pd.Series | np.ndarray | Sequence,
+    y: pd.Series | np.ndarray | Sequence | None = None,
     *,
     top_k: int = 10,
     task: str = "auto",
@@ -469,14 +542,14 @@ def compare_sam_mfp_with_baselines(
         Output of prioritize_sam_mfp.
     X : pd.DataFrame or np.ndarray
         Feature matrix.
-    y : array-like
-        Target vector.
+    y : array-like or None, default=None
+        Target vector. Required for supervised baselines ('rf', 'dt', 'mi', 'permutation').
     top_k : int, default=10
         Top-k cut-off for each baseline comparator.
     task : {'auto', 'classification', 'regression'}, default='auto'
         Task type for supervised baselines.
     baselines : sequence of str, default=('rf', 'dt', 'mi', 'permutation')
-        Subset of baselines to compute ('rf', 'dt', 'mi', 'permutation').
+        Subset of baselines to compute ('rf', 'dt', 'mi', 'permutation', 'variance', 'random').
     random_state : int, default=42
         Random seed for reproducibility.
     feature_names : list of str, optional
@@ -500,27 +573,43 @@ def compare_sam_mfp_with_baselines(
     for b in baselines:
         b_clean = b.strip().lower()
         if b_clean in ("rf", "random_forest"):
+            if y is None:
+                raise ValueError("Target 'y' is required for Random Forest baseline.")
             b_df = compute_rf_importance(
                 X, y, task=task, random_state=random_state, feature_names=feature_names
             )
             key = "rf"
         elif b_clean in ("dt", "decision_tree"):
+            if y is None:
+                raise ValueError("Target 'y' is required for Decision Tree baseline.")
             b_df = compute_decision_tree_importance(
                 X, y, task=task, random_state=random_state, feature_names=feature_names
             )
             key = "dt"
         elif b_clean in ("mi", "mutual_info", "mutual_information"):
+            if y is None:
+                raise ValueError("Target 'y' is required for Mutual Information baseline.")
             b_df = compute_mutual_info(
                 X, y, task=task, random_state=random_state, feature_names=feature_names
             )
             key = "mi"
         elif b_clean in ("permutation", "perm", "permutation_importance"):
+            if y is None:
+                raise ValueError("Target 'y' is required for Permutation Importance baseline.")
             b_df = compute_permutation_importance(
                 X, y, task=task, random_state=random_state, feature_names=feature_names
             )
             key = "permutation"
+        elif b_clean in ("variance", "var"):
+            b_df = compute_variance_importance(X, feature_names=feature_names)
+            key = "variance"
+        elif b_clean in ("random", "rand"):
+            b_df = compute_random_ranking(X, random_state=random_state, feature_names=feature_names)
+            key = "random"
         else:
-            raise ValueError(f"Unknown baseline name '{b}'. Choose from 'rf', 'dt', 'mi', 'permutation'.")
+            raise ValueError(
+                f"Unknown baseline name '{b}'. Choose from 'rf', 'dt', 'mi', 'permutation', 'variance', 'random'."
+            )
 
         baseline_tables[key] = b_df
         comp = compare_prioritization(sam_mfp_df, b_df, top_k=top_k)
