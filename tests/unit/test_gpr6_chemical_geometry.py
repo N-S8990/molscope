@@ -1,9 +1,31 @@
-"""Focused checks for the published GPR6 heavy-atom geometry panel."""
+"""Focused checks for chemical geometry calculation primitives."""
 
 import numpy as np
 import pytest
 
-from studies.gpr6.analysis_protocol.prepare_chemical_panel import DEFINITIONS, ring_normal, value
+from molscope.features.geometry.generic import ring_normal, value
+
+# (feature_id, geometry_kind, left_atom_names, right_atom_names, (left_resid, right_resid))
+DEFINITIONS = (
+    ("ASP118_SER155", "min", ("OD1", "OD2"), ("OG",), (118, 155)),
+    ("ASP118_ASN321", "min", ("OD1", "OD2"), ("OD1", "ND2"), (118, 321)),
+    ("SER155_ASN321", "centroid", ("OG",), ("OD1", "ND2"), (155, 321)),
+    ("HSE128_PHE152", "min", ("ND1", "NE2"), ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), (128, 152)),
+    ("LEU148_PHE152", "min", ("CD1", "CD2"), ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), (148, 152)),
+    ("PHE152_TRP292_centroid", "centroid", ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), ("CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"), (152, 292)),
+    ("PHE152_TRP292_normal", "normal", ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), ("CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"), (152, 292)),
+    ("PHE152_PHE295_centroid", "centroid", ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), (152, 295)),
+    ("PHE152_PHE295_normal", "normal", ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), (152, 295)),
+    ("PHE234_TRP292_centroid", "centroid", ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), ("CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"), (234, 292)),
+    ("PHE234_TRP292_normal", "normal", ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), ("CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"), (234, 292)),
+    ("VAL156_PHE288", "min", ("CG1", "CG2"), ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), (156, 288)),
+    ("VAL237_PHE288", "min", ("CG1", "CG2"), ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), (237, 288)),
+    ("ARG166_THR274", "min", ("NE", "CZ", "NH1", "NH2"), ("OG1",), (166, 274)),
+    ("ASP165_TYR176", "min", ("OD1", "OD2"), ("OH",), (165, 176)),
+    ("ARG166_GLY277", "min", ("NE", "CZ", "NH1", "NH2"), ("O",), (166, 277)),
+    ("ARG166_TYR329", "centroid", ("CZ",), ("CG", "CD1", "CD2", "CE1", "CE2", "CZ"), (166, 329)),
+    ("CYS209_CYS216", "min", ("SG",), ("SG",), (209, 216)),
+)
 
 
 def test_panel_has_unique_named_heavy_atom_measurements():
