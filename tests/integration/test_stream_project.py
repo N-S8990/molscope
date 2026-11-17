@@ -51,3 +51,62 @@ def test_project_preserves_identity_and_independent_analysis(tmp_path, monkeypat
     assert identity["metadata"]["label_condition"] == "declared"
     with pytest.raises(FileExistsError):
         run_stream_project("project.json", tmp_path / "run")
+
+
+def test_project_runs_sam_mfp_integration_across_replicas(tmp_path, monkeypatch):
+    import molscope.stream_project as module
+    inputs = [SimpleNamespace(topology="top", trajectory="traj", trajectory_id=f"s:e:r{i}",
+                              system_id="s", ensemble_id="s:e", replica_id=f"r{i}",
+                              metadata={"label_condition": "declared"}) for i in range(2)]
+    project = SimpleNamespace(project_id="study", analysis=AnalysisSpec(), labels=(), prediction_tasks=(),
+                              validate_paths=lambda: [], trajectory_inputs=lambda: inputs)
+    monkeypatch.setattr(module, "load_project_spec", lambda path: project)
+    monkeypatch.setattr(module, "profile_system", lambda *args: SimpleNamespace(to_dict=lambda: {"atom_count": 2}))
+
+    def extract(top, traj, directory, **kwargs):
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / "manifest.json"
+
+    def analyze(source, directory, config):
+        directory.mkdir(parents=True, exist_ok=True)
+        q = pd.DataFrame({
+            "Feature": ["f1", "f2"],
+            "Valid_Fraction": [1.0, 1.0],
+            "Resolution": ["frame", "frame"],
+            "Median_ESS": [10.0, 20.0],
+            "ESS_Ratio": [0.5, 0.8],
+            "Replica_Consistency": [0.9, 0.95],
+            "Occupancy_Entropy": [0.8, 0.85],
+            "Uniqueness": [0.7, 0.9],
+        })
+        s = pd.DataFrame({
+            "Feature": ["f1", "f2"],
+            "PCA_Salience": [0.8, 0.6],
+            "PCA_Rank": [1.0, 2.0],
+            "LOTO_Rank_Median": [1.0, 2.0],
+            "LOTO_Rank_Std": [0.0, 0.0],
+            "LOTO_Folds": [2, 2],
+            "LOTO_Rank_Std_Normalized": [0.0, 0.0],
+        })
+        exp = pd.DataFrame({
+            "Feature": ["f1", "f2"],
+            "State_Explained_Variance_Eta_Squared": [0.3, 0.4],
+        })
+        q.to_csv(directory / "feature_quality.csv", index=False)
+        s.to_csv(directory / "representation_salience.csv", index=False)
+        exp.to_csv(directory / "state_explanatory_ranking.csv", index=False)
+        return {"frames_analyzed": 20}
+
+    monkeypatch.setattr(module, "extract_streaming", extract)
+    monkeypatch.setattr(module, "analyze_stream", analyze)
+
+    import pandas as pd
+    from molscope.execution.stream_analysis import StreamAnalysisConfig
+    report = run_stream_project("project.json", tmp_path / "run_sam",
+                                analysis_config=StreamAnalysisConfig(compute_sam_mfp=True))
+
+    assert report["status"] == "completed"
+    assert (tmp_path / "run_sam/project_sam_mfp_candidates.csv").is_file()
+    assert report["project_sam_mfp_candidate_count"] >= 1
+    assert "predictive ML" in report["omitted_stages"]
+    assert "cross-replica stability" not in report["omitted_stages"]
