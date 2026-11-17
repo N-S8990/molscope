@@ -30,10 +30,22 @@ class StateDiscoveryConfig:
 
 
 def _coordinate_columns(coordinates: pd.DataFrame) -> list[str]:
-    columns = [column for column in coordinates if column.startswith("PC") and column[2:].isdigit()]
-    if not columns:
-        raise ValueError("State discovery requires at least one PC coordinate column.")
-    return sorted(columns, key=lambda value: int(value[2:]))
+    ckpca_underscore_cols = [c for c in coordinates if c.startswith("CKPCA_") and c[6:].isdigit()]
+    if ckpca_underscore_cols:
+        return sorted(ckpca_underscore_cols, key=lambda value: int(value[6:]))
+    ckpca_cols = [c for c in coordinates if c.startswith("CKPCA") and not c.startswith("CKPCA_") and c[5:].isdigit()]
+    if ckpca_cols:
+        return sorted(ckpca_cols, key=lambda value: int(value[5:]))
+    tic_underscore_cols = [c for c in coordinates if c.startswith("TIC_") and c[4:].isdigit()]
+    if tic_underscore_cols:
+        return sorted(tic_underscore_cols, key=lambda value: int(value[4:]))
+    tic_cols = [c for c in coordinates if c.startswith("TIC") and not c.startswith("TIC_") and c[3:].isdigit()]
+    if tic_cols:
+        return sorted(tic_cols, key=lambda value: int(value[3:]))
+    pc_cols = [column for column in coordinates if column.startswith("PC") and column[2:].isdigit()]
+    if pc_cols:
+        return sorted(pc_cols, key=lambda value: int(value[2:]))
+    raise ValueError("State discovery requires at least one PC, TIC, or CKPCA coordinate column.")
 
 
 def _validate_coordinate_identity(coordinates: pd.DataFrame, manifest: pd.DataFrame) -> None:
