@@ -18,9 +18,21 @@ from molscope.analysis.predictive.workflow import MLWorkflowConfig, run_grouped_
 from molscope.core.identity import TrajectoryInput, build_frame_manifest
 from molscope.profiling.system import ComponentProfile, SystemProfile, profile_system
 from molscope.analysis.discovery.states import StateDiscoveryConfig, discover_conformational_states, evaluate_state_count_sensitivity
+from molscope.analysis.discovery.tica import TICAConfig, TICAResult, fit_tica
+from molscope.analysis.discovery.contact_kpca import ContactKPCAConfig, ContactKPCAResult, fit_contact_kpca
+from molscope.analysis.discovery.decision_tree import DecisionRule, DecisionTreeExplainer
+from molscope.analysis.discovery.density_peaks import DPAConfig, DPAResult, cluster_dpa
 from molscope.execution.discovery import DiscoveryPipelineConfig, run_target_free_discovery_pipeline
 from molscope.execution.pipeline import MDContactMLPipeline
 from molscope.core.project import OpenMMSimulationSpec
+from molscope.api import Study
+from molscope.io.transformations import ImagingPolicy, load_universe
+from molscope.analysis.quality.statistical_rigor import (
+    check_simulation_convergence,
+    compute_clustering_validity_indices,
+    evaluate_bootstrap_cluster_stability,
+    evaluate_seed_stability,
+)
 
 __all__ = [
     "AnalyzerCatalog",
@@ -56,8 +68,26 @@ __all__ = [
     "StateDiscoveryConfig",
     "discover_conformational_states",
     "evaluate_state_count_sensitivity",
+    "TICAConfig",
+    "TICAResult",
+    "fit_tica",
+    "ContactKPCAConfig",
+    "ContactKPCAResult",
+    "fit_contact_kpca",
+    "DecisionRule",
+    "DecisionTreeExplainer",
+    "DPAConfig",
+    "DPAResult",
+    "cluster_dpa",
     "DiscoveryPipelineConfig",
     "run_target_free_discovery_pipeline",
     "MDContactMLPipeline",
     "OpenMMSimulationSpec",
+    "Study",
+    "ImagingPolicy",
+    "load_universe",
+    "evaluate_seed_stability",
+    "evaluate_bootstrap_cluster_stability",
+    "compute_clustering_validity_indices",
+    "check_simulation_convergence",
 ]
