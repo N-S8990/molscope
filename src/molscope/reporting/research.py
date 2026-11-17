@@ -43,18 +43,82 @@ def render_report_figures(
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
-    if sam_mfp is not None and {"PCA_Salience", "Replica_Consistency", "SAM_MFP_Pareto_Front"}.issubset(sam_mfp.columns):
-        fig, axis = plt.subplots(figsize=(7, 5))
-        front = sam_mfp["SAM_MFP_Pareto_Front"].astype(bool)
-        axis.scatter(sam_mfp.loc[~front, "PCA_Salience"], sam_mfp.loc[~front, "Replica_Consistency"], alpha=0.35, s=18, label="Other eligible features")
-        axis.scatter(sam_mfp.loc[front, "PCA_Salience"], sam_mfp.loc[front, "Replica_Consistency"], color="#d95f02", s=30, label="SAM-MFP Pareto candidates")
-        axis.set(xlabel="Target-free PCA salience", ylabel="Replica consistency", title="Feature prioritization trade-off")
-        axis.legend(frameon=False)
-        fig.tight_layout()
-        path = out_dir / "sam_mfp_tradeoff.png"
-        fig.savefig(path, dpi=200)
-        plt.close(fig)
-        written.append(path.name)
+    if sam_mfp is not None and "SAM_MFP_Pareto_Front" in sam_mfp.columns:
+        salience_col = None
+        for candidate in ("PCA_Salience", "TICA_Salience", "Kinetic_Salience"):
+            if candidate in sam_mfp.columns:
+                salience_col = candidate
+                break
+
+        if salience_col is not None:
+            # Determine best y-axis objective that has valid finite values
+            y_col = None
+            y_label = None
+            if (
+                "Replica_Consistency" in sam_mfp.columns
+                and pd.to_numeric(sam_mfp["Replica_Consistency"], errors="coerce").notna().sum() > 0
+            ):
+                y_col = "Replica_Consistency"
+                y_label = "Replica consistency"
+            elif (
+                "ESS_Ratio" in sam_mfp.columns
+                and pd.to_numeric(sam_mfp["ESS_Ratio"], errors="coerce").notna().sum() > 0
+            ):
+                y_col = "ESS_Ratio"
+                y_label = "Effective sample size ratio (ESS / N)"
+            elif (
+                "Uniqueness" in sam_mfp.columns
+                and pd.to_numeric(sam_mfp["Uniqueness"], errors="coerce").notna().sum() > 0
+            ):
+                y_col = "Uniqueness"
+                y_label = "Information uniqueness (1 - redundancy)"
+            elif (
+                "Occupancy_Entropy" in sam_mfp.columns
+                and pd.to_numeric(sam_mfp["Occupancy_Entropy"], errors="coerce").notna().sum() > 0
+            ):
+                y_col = "Occupancy_Entropy"
+                y_label = "Occupancy entropy"
+
+            if y_col is not None:
+                valid_mask = (
+                    pd.to_numeric(sam_mfp[salience_col], errors="coerce").notna()
+                    & pd.to_numeric(sam_mfp[y_col], errors="coerce").notna()
+                )
+                if "SAM_MFP_Eligible" in sam_mfp.columns and sam_mfp.loc[valid_mask, "SAM_MFP_Eligible"].any():
+                    plot_data = sam_mfp[valid_mask & sam_mfp["SAM_MFP_Eligible"]].copy()
+                else:
+                    plot_data = sam_mfp[valid_mask].copy()
+
+                if not plot_data.empty:
+                    fig, axis = plt.subplots(figsize=(7, 5))
+                    front = plot_data["SAM_MFP_Pareto_Front"].astype(bool)
+                    axis.scatter(
+                        plot_data.loc[~front, salience_col],
+                        plot_data.loc[~front, y_col],
+                        alpha=0.35,
+                        s=18,
+                        color="#4393c3",
+                        label="Other eligible features",
+                    )
+                    axis.scatter(
+                        plot_data.loc[front, salience_col],
+                        plot_data.loc[front, y_col],
+                        color="#d95f02",
+                        s=30,
+                        label="SAM-MFP Pareto candidates",
+                    )
+                    salience_name = salience_col.replace("_", " ")
+                    axis.set(
+                        xlabel=f"Target-free {salience_name}",
+                        ylabel=y_label,
+                        title=f"Feature prioritization trade-off ({salience_name} vs {y_col.replace('_', ' ')})",
+                    )
+                    axis.legend(frameon=False)
+                    fig.tight_layout()
+                    path = out_dir / "sam_mfp_tradeoff.png"
+                    fig.savefig(path, dpi=200)
+                    plt.close(fig)
+                    written.append(path.name)
     if state_populations is not None and {"trajectory_id", "State", "Population"}.issubset(state_populations.columns):
         matrix = state_populations.pivot(index="trajectory_id", columns="State", values="Population").fillna(0.0)
         if not matrix.empty:
@@ -67,22 +131,45 @@ def render_report_figures(
             fig.savefig(path, dpi=200)
             plt.close(fig)
             written.append(path.name)
-    if quality is not None and {"Valid_Fraction", "Replica_Consistency", "Pareto_Front"}.issubset(quality.columns):
-        valid = quality[["Valid_Fraction", "Replica_Consistency", "Pareto_Front"]].copy()
-        valid["Replica_Consistency"] = pd.to_numeric(valid["Replica_Consistency"], errors="coerce")
-        valid = valid.dropna(subset=["Replica_Consistency"])
-        if not valid.empty:
-            fig, axis = plt.subplots(figsize=(7, 5))
-            front = valid["Pareto_Front"].astype(bool)
-            axis.scatter(valid.loc[~front, "Valid_Fraction"], valid.loc[~front, "Replica_Consistency"], alpha=0.35, s=18, label="Other features")
-            axis.scatter(valid.loc[front, "Valid_Fraction"], valid.loc[front, "Replica_Consistency"], color="#1b9e77", s=30, label="Quality Pareto features")
-            axis.set(xlabel="Finite-value fraction", ylabel="Replica consistency", xlim=(-0.02, 1.02), ylim=(-0.02, 1.02), title="Feature measurement quality")
-            axis.legend(frameon=False)
-            fig.tight_layout()
-            path = out_dir / "feature_quality_tradeoff.png"
-            fig.savefig(path, dpi=200)
-            plt.close(fig)
-            written.append(path.name)
+    if quality is not None and {"Valid_Fraction", "Pareto_Front"}.issubset(quality.columns):
+        y_q_col = None
+        y_q_label = None
+        if (
+            "Replica_Consistency" in quality.columns
+            and pd.to_numeric(quality["Replica_Consistency"], errors="coerce").notna().sum() > 0
+        ):
+            y_q_col = "Replica_Consistency"
+            y_q_label = "Replica consistency"
+        elif (
+            "ESS_Ratio" in quality.columns
+            and pd.to_numeric(quality["ESS_Ratio"], errors="coerce").notna().sum() > 0
+        ):
+            y_q_col = "ESS_Ratio"
+            y_q_label = "Effective sample size ratio (ESS / N)"
+        elif (
+            "Uniqueness" in quality.columns
+            and pd.to_numeric(quality["Uniqueness"], errors="coerce").notna().sum() > 0
+        ):
+            y_q_col = "Uniqueness"
+            y_q_label = "Information uniqueness"
+
+        if y_q_col is not None:
+            valid = quality[["Valid_Fraction", y_q_col, "Pareto_Front"]].copy()
+            valid[y_q_col] = pd.to_numeric(valid[y_q_col], errors="coerce")
+            valid["Valid_Fraction"] = pd.to_numeric(valid["Valid_Fraction"], errors="coerce")
+            valid = valid.dropna(subset=["Valid_Fraction", y_q_col])
+            if not valid.empty:
+                fig, axis = plt.subplots(figsize=(7, 5))
+                front = valid["Pareto_Front"].astype(bool)
+                axis.scatter(valid.loc[~front, "Valid_Fraction"], valid.loc[~front, y_q_col], alpha=0.35, s=18, label="Other features")
+                axis.scatter(valid.loc[front, "Valid_Fraction"], valid.loc[front, y_q_col], color="#1b9e77", s=30, label="Quality Pareto features")
+                axis.set(xlabel="Finite-value fraction", ylabel=y_q_label, title=f"Feature measurement quality (Valid fraction vs {y_q_col.replace('_', ' ')})")
+                axis.legend(frameon=False)
+                fig.tight_layout()
+                path = out_dir / "feature_quality_tradeoff.png"
+                fig.savefig(path, dpi=200)
+                plt.close(fig)
+                written.append(path.name)
     if representation_salience is not None and {"Feature", "PCA_Salience"}.issubset(representation_salience.columns):
         top = representation_salience.loc[:, ["Feature", "PCA_Salience"]].dropna().nlargest(15, "PCA_Salience").iloc[::-1]
         if not top.empty:
@@ -430,9 +517,9 @@ def write_result_guide(output_dir: str | Path, outputs: dict, figures: list[str]
         "pca_density_3d.png": "Binned frame occupancy in PC1–PC3 shown as a colored 3D scatter. These axes are learned coordinates, not physical x/y/z positions.",
         "predictive_accuracy_gain_drop.png": "Grouped test accuracy with all features and with each of the 15 groups having the largest absolute changes removed.",
         "predictive_feature_ranking.png": "The 15 largest absolute signed changes in grouped test accuracy when a feature group is removed.",
-        "sam_mfp_tradeoff.png": "PCA salience against replica consistency, with Pareto candidates highlighted.",
+        "sam_mfp_tradeoff.png": "Representation salience plotted against measurement quality (replica consistency or effective sample size), with Pareto candidates highlighted.",
         "state_populations.png": "Candidate state populations by trajectory.",
-        "feature_quality_tradeoff.png": "Measurement validity against replica consistency.",
+        "feature_quality_tradeoff.png": "Measurement validity plotted against quality metrics (replica consistency or effective sample size).",
         "representation_salience.png": "Features contributing most to the PCA representation.",
         "state_explanatory_feature_ranking.png": "Descriptive separation of states inferred from the same data.",
     }
