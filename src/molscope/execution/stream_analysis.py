@@ -204,10 +204,59 @@ def analyze_stream(source: str | Path, output_dir: str | Path,
                               "States are descriptive hypotheses; no replica stability or SAM-MFP was computed.",
                               "Array budget is an estimate, not a hard process memory cap.",
                               "Million-frame capacity has not been validated by this run unless its recorded frame count reaches that size."]}
-    text = f"<h1>MolScope streaming analysis</h1><p>{moments.count} frames; {width} features; {len(sample)} training samples.</p>"
-    text += "<ul>" + "".join(f"<li>{html.escape(line)}</li>" for line in report["limitations"]) + "</ul>"
-    text += "<img src='state_populations.png' alt='State populations'><p><a href='feature_summary.csv'>Feature summaries</a> · <a href='state_populations.csv'>State populations</a> · <a href='analysis_summary.json'>Provenance and chunk index</a></p>"
-    (destination / "report.html").write_text("<!doctype html><meta charset='utf-8'><title>MolScope streaming report</title>" + text)
+    state_rows = [{"state": int(i), "frames": int(count), "fraction": float(count / moments.count)}
+                  for i, count in enumerate(counts)]
+    state_rows.sort(key=lambda row: row["frames"], reverse=True)
+    largest_state = state_rows[0] if state_rows else None
+    variable = summary_table.loc[summary_table["Variable_In_Training_Sample"]].nlargest(8, "Std")
+    feature_rows = "".join(
+        f"<tr><td>{html.escape(str(row.Feature))}</td><td>{row.Mean:.4g}</td><td>{row.Std:.4g}</td><td>{row.Minimum:.4g}</td><td>{row.Maximum:.4g}</td></tr>"
+        for row in variable.itertuples(index=False)
+    ) or "<tr><td colspan='5'>No variable feature measurements in the training sample.</td></tr>"
+    population_rows = "".join(
+        f"<tr><td>State {row['state']}</td><td>{row['frames']:,}</td><td>{row['fraction']:.1%}</td></tr>"
+        for row in sorted(state_rows, key=lambda row: row["state"])
+    )
+    imbalance = (f"State {largest_state['state']} is the most populated candidate ({largest_state['fraction']:.1%} of frames)."
+                 if largest_state else "No candidate states were assigned.")
+    report["largest_candidate_state"] = largest_state
+    report["top_variable_features_by_sample_standard_deviation"] = variable["Feature"].astype(str).tolist()
+    css = """
+      :root{color-scheme:light;--ink:#17212b;--muted:#586777;--line:#d9e1e8;--blue:#245b78;--paper:#fff;--wash:#f3f7fa}
+      *{box-sizing:border-box}body{margin:0;background:var(--wash);color:var(--ink);font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+      main{max-width:1120px;margin:36px auto;padding:0 22px 48px}header{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:28px 32px;margin-bottom:18px}
+      h1{font-size:30px;line-height:1.2;margin:0 0 8px}h2{font-size:20px;margin:0 0 12px}h3{font-size:15px;margin:24px 0 8px;color:var(--blue)}p{margin:6px 0;color:var(--muted)}
+      .eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;color:var(--blue)}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+      .card,section{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px}.metric{font-size:26px;font-weight:700;line-height:1.2}.label{font-size:12px;color:var(--muted);margin-top:5px}
+      section{margin-top:14px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted);font-weight:650;background:#f8fafb}td:first-child{overflow-wrap:anywhere}
+      img{display:block;max-width:100%;height:auto;margin:12px auto 2px}.note{border-left:3px solid #d19531;padding:10px 13px;background:#fff9eb;border-radius:3px;color:#564625}
+      nav a{color:var(--blue);text-decoration:none;margin-right:16px}footer{font-size:12px;color:var(--muted);padding:20px 4px}
+      @media(max-width:680px){main{margin:18px auto;padding:0 12px 30px}.cards{grid-template-columns:1fr}header,section{padding:18px}table{font-size:12px}th,td{padding:7px 5px}}
+    """
+    text = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+      <title>MolScope | Streaming analysis</title><style>{css}</style></head><body><main>
+      <header><div class='eyebrow'>MolScope · descriptive analysis</div><h1>Streaming trajectory report</h1>
+      <p>State discovery was fitted on a reproducible sample and applied to all analyzed frames.</p>
+      <nav><a href='#results'>Results</a><a href='#features'>Variable features</a><a href='#methods'>Scope and methods</a><a href='analysis_summary.json'>Full analysis record</a></nav></header>
+      <div class='cards'><div class='card'><div class='metric'>{moments.count:,}</div><div class='label'>frames analyzed</div></div>
+      <div class='card'><div class='metric'>{width:,}</div><div class='label'>measured feature columns</div></div>
+      <div class='card'><div class='metric'>{len(sample):,}</div><div class='label'>frames used to fit PCA and clustering</div></div></div>
+      <section id='results'><h2>Results at a glance</h2><p>{config.states} candidate states were assigned across all analyzed frames. {imbalance}</p>
+      <table><thead><tr><th>Candidate state</th><th>Frames</th><th>Population</th></tr></thead><tbody>{population_rows}</tbody></table>
+      <h3>State populations</h3><img src='state_populations.png' alt='Fraction of analyzed frames assigned to each candidate state'>
+      <p>State labels are descriptive clusters in the fitted PCA representation; they are not experimentally validated states.</p></section>
+      <section id='features'><h2>Most variable measured features</h2><p>Sorted by standard deviation in the training sample. Units remain those of the extracted feature.</p>
+      <table><thead><tr><th>Feature</th><th>Mean</th><th>Std. dev.</th><th>Minimum</th><th>Maximum</th></tr></thead><tbody>{feature_rows}</tbody></table>
+      <p><a href='feature_summary.csv'>Download complete feature summary</a></p></section>
+      <section id='methods'><h2>Scope and interpretation</h2><p class='note'>This run performs sample-trained descriptive state discovery. It does not calculate replica stability, SAM-MFP prioritization, supervised prediction, or kinetic rates.</p>
+      <h3>Method and resource record</h3><table><tbody><tr><th>Training sample</th><td>{len(sample):,} uniformly reservoir-sampled frames; seed {config.seed}</td></tr>
+      <tr><th>Representation</th><td>Standard scaling followed by {components}-component PCA on {int(active.sum()):,} variable features</td></tr>
+      <tr><th>Clustering</th><td>K-means with {config.states} requested states; 10 initializations</td></tr>
+      <tr><th>Estimated array workspace</th><td>{estimate / (1024 * 1024):.1f} MiB (estimate, not a process memory limit)</td></tr></tbody></table>
+      <h3>Limitations</h3><ul>{''.join(f'<li>{html.escape(line)}</li>' for line in report['limitations'])}</ul>
+      <p><a href='state_populations.csv'>State population data</a> · <a href='feature_summary.csv'>Feature summary data</a> · <a href='analysis_summary.json'>Chunk hashes and complete provenance</a></p></section>
+      <footer>MolScope streaming analysis · {moments.count:,} frames processed</footer></main></body></html>"""
+    (destination / "report.html").write_text(text, encoding="utf-8")
     # Commit the completed marker only after every artifact has been written.
     pending = destination / "analysis_summary.json.tmp"
     pending.write_text(json.dumps(report, indent=2) + "\n")
