@@ -1,0 +1,7 @@
+Stage,MolScope_Seconds,mdxplain_Seconds,Notes
+Feature Extraction,20.28109933299129,0.9777727499895263,"MolScope extracts contacts, distances, DSSP, dihedrals; mdxplain extracts distances & contacts"
+Dimensionality Reduction (CKPCA),13.426441375020659,0.3127156659902539,Contact Kernel PCA (5 components)
+Clustering (DPA),0.05681670899502933,0.4718058329890482,Density Peak Advanced (Z=2.0)
+Explainability (Decision Tree),3.6795682499941904,0.0780115409870632,Decision tree rules and Gini importance
+Total Pipeline,38.69451937501435,2.062951083004009,Full pipeline including setup and validation
+Peak RSS Memory (MB),929.171875,1211.890625,Maximum memory footprint

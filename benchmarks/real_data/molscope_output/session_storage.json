@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "features": "frame_features.parquet",
+  "manifest": "frame_manifest.parquet"
+}

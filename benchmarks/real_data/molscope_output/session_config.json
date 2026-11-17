@@ -1,0 +1,6 @@
+{
+  "pca_components": 5,
+  "state_count": 2,
+  "supervised_splits": 3,
+  "supervised_bootstrap_samples": 1000
+}

@@ -1,0 +1,4 @@
+Comparison,Adjusted_Rand_Index,Normalized_Mutual_Info,Notes
+MolScope DPA (CKPCA) vs mdxplain DPA (CKPCA),0.3494,0.5786,Both pipelines end-to-end on Contact KPCA
+MolScope DPA (TICA) vs mdxplain DPA (CKPCA),0.3714,0.5465,Kinetic coordinates vs purely structural coordinates
+MolScope DPA vs mdxplain DPA (Same Coordinates),0.4228,0.632,DPA algorithmic isolation on identical mdxplain CKPCA coordinates
