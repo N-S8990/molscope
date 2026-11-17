@@ -1,3 +1,0 @@
-# Documentation moved
-
-See [PART 17 HYDROPHOBIC CONTACTS](archive/PART_17_HYDROPHOBIC_CONTACTS.md).
