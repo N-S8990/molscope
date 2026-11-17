@@ -260,6 +260,38 @@ def assess_feature_quality(
         & (quality["Valid_Fraction"] >= config.min_valid_fraction)
         & quality[["ESS_Ratio", "Replica_Consistency", "Occupancy_Entropy", "Uniqueness"]].notna().all(axis=1)
     )
+    eligibility_statuses = []
+    ineligibility_reasons = []
+    for _, row in quality.iterrows():
+        if bool(row["Pareto_Eligible"]):
+            eligibility_statuses.append("eligible")
+            ineligibility_reasons.append("Eligible for Pareto candidate evaluation.")
+        elif row["Resolution"] == "unavailable":
+            eligibility_statuses.append("unavailable")
+            ineligibility_reasons.append(
+                "Feature values are completely missing or non-finite across all frames (valid_fraction=0.0); no silent imputation applied."
+            )
+        elif float(row["Valid_Fraction"]) < config.min_valid_fraction:
+            eligibility_statuses.append("insufficient_valid_frames")
+            ineligibility_reasons.append(
+                f"Valid frame fraction ({float(row['Valid_Fraction']):.2%}) is below threshold ({config.min_valid_fraction:.2%}); missing values are preserved without imputation."
+            )
+        elif row["Resolution"] == "trajectory":
+            eligibility_statuses.append("trajectory_level")
+            ineligibility_reasons.append(
+                "Feature is constant across frames within trajectories; frame-level dynamic diagnostics are not applicable."
+            )
+        else:
+            missing_objectives = [
+                col for col in ["ESS_Ratio", "Replica_Consistency", "Occupancy_Entropy", "Uniqueness"]
+                if pd.isna(row.get(col))
+            ]
+            eligibility_statuses.append("missing_diagnostics")
+            ineligibility_reasons.append(
+                f"Missing required multi-criteria diagnostics ({', '.join(missing_objectives)}); zero-filling prohibited."
+            )
+    quality["Eligibility_Status"] = eligibility_statuses
+    quality["Ineligibility_Reason"] = ineligibility_reasons
     quality["Pareto_Front"] = False
     quality["Dominator_Count"] = np.nan
     eligible = quality.index[quality["Pareto_Eligible"]].tolist()
