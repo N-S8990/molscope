@@ -14,7 +14,9 @@ from molscope.analysis.prioritization.baselines import (
     compute_decision_tree_importance,
     compute_mutual_info,
     compute_permutation_importance,
+    compute_random_ranking,
     compute_rf_importance,
+    compute_variance_importance,
 )
 from molscope.analysis.quality.assessment import assess_feature_quality
 from molscope.analysis.discovery.representation import discover_representation_features
@@ -182,6 +184,28 @@ def test_sam_mfp_baselines_comparisons():
     assert (summary_table["Top_K_Recall"] == 1.0).all()
     assert set(multi_comp["consensus_top_k"]) == {"feat_00", "feat_01", "feat_02"}
     assert set(multi_comp["consensus_pareto_overlap"]) == {"feat_00", "feat_01", "feat_02"}
+
+    # Test variance and random baselines
+    var_df = compute_variance_importance(features)
+    assert len(var_df) == features.shape[1]
+    assert "Variance" in var_df.columns
+    assert "Variance_Rank" in var_df.columns
+    assert var_df["Variance"].is_monotonic_decreasing
+
+    rand_df = compute_random_ranking(features, random_state=42)
+    assert len(rand_df) == features.shape[1]
+    assert "Random_Score" in rand_df.columns
+    assert "Random_Rank" in rand_df.columns
+
+    # Test compare_sam_mfp_with_baselines with variance, mi, dt, and random
+    baselines_comp = compare_sam_mfp_with_baselines(
+        candidates, features, y, top_k=3, baselines=("variance", "mi", "dt", "random")
+    )
+    assert "variance" in baselines_comp["baseline_tables"]
+    assert "random" in baselines_comp["baseline_tables"]
+    assert "dt" in baselines_comp["baseline_tables"]
+    assert "mi" in baselines_comp["baseline_tables"]
+    assert len(baselines_comp["summary_table"]) == 4
 
 
 def test_sam_mfp_collinearity_and_permutation_failure_mode():
@@ -482,3 +506,37 @@ def test_sam_mfp_eligibility_and_validation():
     cand, _ = prioritize_sam_mfp(non_frame_quality, non_frame_salience)
     assert not cand.loc[0, "SAM_MFP_Eligible"]
     assert not cand.loc[0, "SAM_MFP_Pareto_Front"]
+
+
+def test_sam_mfp_single_trajectory_nan_replica_consistency_fallback():
+    """Verify that when Replica_Consistency is all-NaN (single trajectory), SAM-MFP automatically adapts."""
+    quality = pd.DataFrame([
+        {
+            "Feature": "f1",
+            "Resolution": "frame",
+            "Valid_Fraction": 1.0,
+            "ESS_Ratio": 0.8,
+            "Replica_Consistency": np.nan,  # single trajectory: undefined
+            "Occupancy_Entropy": 0.7,
+            "Uniqueness": 0.9,
+        },
+        {
+            "Feature": "f2",
+            "Resolution": "frame",
+            "Valid_Fraction": 1.0,
+            "ESS_Ratio": 0.3,
+            "Replica_Consistency": np.nan,
+            "Occupancy_Entropy": 0.4,
+            "Uniqueness": 0.3,
+        },
+    ])
+    salience = pd.DataFrame([
+        {"Feature": "f1", "PCA_Salience": 0.85},
+        {"Feature": "f2", "PCA_Salience": 0.15},
+    ])
+    cand, notes = prioritize_sam_mfp(quality, salience)
+    assert cand.loc[cand["Feature"] == "f1", "SAM_MFP_Eligible"].values[0]
+    assert cand.loc[cand["Feature"] == "f1", "SAM_MFP_Pareto_Front"].values[0]
+    assert not cand.loc[cand["Feature"] == "f2", "SAM_MFP_Pareto_Front"].values[0]
+    assert any("Single trajectory available" in n for n in notes)
+    assert "Replica_Consistency" not in cand.loc[0, "SAM_MFP_Objectives"]
