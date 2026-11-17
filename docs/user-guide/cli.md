@@ -35,5 +35,4 @@ python -m molscope.run_benchmark --help
 ```
 
 The limited streaming workflow is documented in [scalable runs](scalable-runs.md).
-For labels and predictive ranking, see the
-[label/ranking reference](../archive/PART_26_LABELS_AND_RANKING.md).
+For labels and predictive ranking, see [project runs](project-runs.md).
