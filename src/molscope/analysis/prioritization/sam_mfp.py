@@ -125,6 +125,15 @@ def prioritize_sam_mfp(
         objective_columns = list(config.custom_objectives)
     else:
         objective_columns = [col for col in _QUALITY_OBJECTIVES if col not in config.excluded_objectives]
+        single_trajectory = (
+            "LOTO_Folds" not in table.columns
+            or pd.to_numeric(table["LOTO_Folds"], errors="coerce").fillna(0).max() < config.min_loto_folds
+        )
+        if single_trajectory and "Replica_Consistency" in objective_columns and (
+            "Replica_Consistency" not in table.columns or table["Replica_Consistency"].isna().all()
+        ):
+            objective_columns.remove("Replica_Consistency")
+            notes.append("Single trajectory available; evaluated Pareto candidates without cross-replica consistency.")
         if salience_col in table.columns and salience_col not in config.excluded_objectives:
             objective_columns.append(salience_col)
         if "Representation_Stability" in table.columns and "Representation_Stability" not in config.excluded_objectives:
@@ -174,6 +183,37 @@ def prioritize_sam_mfp(
         table.loc[eligible, "SAM_MFP_Pareto_Front"] = front
         table.loc[eligible, "SAM_MFP_Dominator_Count"] = counts
     table["SAM_MFP_Objectives"] = ",".join(objective_columns)
+
+    statuses = []
+    reasons = []
+    for _, row in table.iterrows():
+        if bool(row.get("SAM_MFP_Pareto_Front", False)):
+            statuses.append("pareto_candidate")
+            reasons.append("Non-dominated candidate on multi-criteria Pareto front.")
+        elif bool(row.get("SAM_MFP_Eligible", False)):
+            statuses.append("dominated")
+            dom_cnt = row.get("SAM_MFP_Dominator_Count")
+            reasons.append(
+                f"Dominated by {int(dom_cnt) if pd.notna(dom_cnt) else 'N/A'} candidate(s) across declared objectives."
+            )
+        else:
+            statuses.append("ineligible")
+            res = str(row.get("Resolution", ""))
+            if res != "frame":
+                reasons.append(f"Feature resolution is '{res}' rather than 'frame'; not imputed.")
+            elif salience_col in objective_columns and pd.isna(row.get(salience_col)):
+                reasons.append(f"Missing representation salience ({salience_col}); zero-filling prohibited.")
+            elif "Representation_Stability" in objective_columns and row.get("LOTO_Folds", 0) < config.min_loto_folds:
+                reasons.append(
+                    f"Insufficient LOTO folds ({row.get('LOTO_Folds', 0)} < {config.min_loto_folds}); replica stability unconfirmed."
+                )
+            else:
+                missing_objs = [obj for obj in objective_columns if pd.isna(row.get(obj))]
+                reasons.append(
+                    f"Missing required Pareto objective values ({', '.join(missing_objs)}); zero-filling prohibited."
+                )
+    table["SAM_MFP_Status"] = statuses
+    table["SAM_MFP_Reason"] = reasons
 
     sort_cols = ["SAM_MFP_Pareto_Front"]
     ascending = [False]
