@@ -69,6 +69,18 @@ class BenchmarkingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "undeclared metrics"):
                 build_benchmark(load_benchmark_spec(spec))
 
+    def test_rejects_nonfinite_and_duplicate_results(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            spec = self._spec(directory)
+            result = directory / "result.csv"
+            result.write_text("metric_id,value\nruntime_seconds,NaN\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "non-finite"):
+                build_benchmark(load_benchmark_spec(spec))
+            result.write_text("metric_id,value\nruntime_seconds,10\nruntime_seconds,11\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate metric rows"):
+                build_benchmark(load_benchmark_spec(spec))
+
     def test_preserves_declared_matched_protocol_without_executing_external_tool(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
