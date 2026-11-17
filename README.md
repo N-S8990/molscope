@@ -31,10 +31,14 @@ and reasons; they are not silently filled with zeroes.
   shells, molecular dipoles, and protein contact networks. A nucleic-acid
   base-center proximity descriptor is available; it is not a base-pairing
   classifier.
-- Report feature quality and run target-free PCA and conformational-state
-  discovery, then present SAM-MFP Pareto candidates.
-- Automatically run grouped predictive ML and predictive feature rankings when
-  researchers supply one valid declared trajectory-level target.
+- Report feature quality, run target-free PCA/TICA conformational-state
+  and DPA cluster discovery, and present SAM-MFP Pareto candidates.
+- **Mandatory Machine Learning & Global Feature Ranking:** ML is a non-optional
+  core component executed on every pipeline run. MolScope trains regularized
+  predictive models (Random Forest, Logistic Regression, and Decision Tree
+  explainers) using purged temporal block cross-validation—either on user-declared
+  targets or automatically on discovered conformational macrostates—to rank all
+  features across all data without autocorrelation leakage.
 - Generate reviewed OpenMM plans and, with OpenMM/PDBFixer installed, execute
   simulations with checkpoints and recovery into recorded trajectory segments.
 - Stream a limited feature subset to checksummed chunks, resume interrupted
