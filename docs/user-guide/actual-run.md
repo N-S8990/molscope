@@ -1,24 +1,23 @@
-# Actual trajectory extraction
+# Run against your own trajectory
 
-The local real-data configuration is `examples/local_2rjy_project.json`.
-It uses the existing 2RJY topology and trajectory, analyzes 100 frames with
-stride 5, and extracts generic features, CA distances/contacts, and residue DSSP.
+Initialize a separate study workspace and edit `project.json` to reference a
+topology and its matching trajectory:
 
 ```bash
-/Users/nirav/ds-env/bin/python -m molscope.run_project \
-  --project examples/local_2rjy_project.json \
-  --extract-only --out-dir results/2rjy_initial_extraction
+python -m molscope init /path/to/study --project-id my_study
 ```
 
-This command has completed successfully. Outputs include stored frame features,
-the identity manifest, extraction evidence and session configuration. Inspect
-`session_storage.json` for the actual table filenames (Parquet or CSV fallback).
+For a first smoke test, configure a small frame cap or stride, then run:
 
-For full discovery, supply at least two actual independent trajectories in the
-project and omit `--extract-only`. Do not duplicate one trajectory to satisfy
-the replica requirement. This initial extraction does not run ML or generate
-the discovery report. The new Conda environment remains uninstalled because
-network access failed; the verified interpreter above is available.
+```bash
+python -m molscope run --study /path/to/study --run-id extraction-001 --extract-only
+```
 
-Generated synthetic results and disposable caches were archived under
-`.cleanup-archive/` instead of deleting regression tests or molecular fixtures.
+This validates and extracts supported features, records applicability evidence,
+and creates an extraction report. Check the run provenance, feature table,
+missingness, and report before scaling up.
+
+Full representation-stability analysis requires at least two actual independent
+trajectories. Do not split or duplicate one trajectory and call the pieces
+independent. Generated smoke datasets and reports were removed; compact
+molecular fixtures needed by tests remain in `tests/fixtures/`.
