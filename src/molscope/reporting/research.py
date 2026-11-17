@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,6 +32,8 @@ def render_report_figures(
     features: pd.DataFrame | None = None,
     representation_coordinates: pd.DataFrame | None = None,
     supervised_model_summary: pd.DataFrame | None = None,
+    state_assignments: pd.DataFrame | None = None,
+    decision_rules: Any | None = None,
 ) -> list[str]:
     """Write compact, descriptive PNGs without converting them into claims."""
     import matplotlib
@@ -170,6 +173,70 @@ def render_report_figures(
                     fig.savefig(path, dpi=200)
                     plt.close(fig)
                     written.append(path.name)
+
+                # Publication-quality 2D Free Energy Landscape on leading PCA components
+                try:
+                    from molscope.reporting.free_energy import compute_pca_free_energy_landscape
+                    fes_res = compute_pca_free_energy_landscape(
+                        representation_coordinates,
+                        pc_x=columns[0],
+                        pc_y=columns[1],
+                    )
+                    fes_path = out_dir / "pca_free_energy_landscape.png"
+                    fes_res.plot_static(
+                        output_path=fes_path,
+                        xlabel=columns[0],
+                        ylabel=columns[1],
+                        title=f"Free Energy Landscape ({columns[0]} vs {columns[1]})",
+                        dpi=200,
+                    )
+                    written.append(fes_path.name)
+                except Exception:
+                    pass
+
+    # Cluster membership timeline and state transition probability matrix
+    if state_assignments is not None and not state_assignments.empty:
+        try:
+            from molscope.visualization.timeline import plot_cluster_timeline, plot_state_transitions
+            tl_path = out_dir / "cluster_timeline.png"
+            plot_cluster_timeline(state_assignments, tl_path, dpi=200)
+            written.append(tl_path.name)
+
+            st_path = out_dir / "state_transitions.png"
+            plot_state_transitions(state_assignments, st_path, dpi=200)
+            written.append(st_path.name)
+        except Exception:
+            pass
+
+    # Decision tree rule visualization
+    if decision_rules is not None:
+        try:
+            from molscope.visualization.rules import plot_decision_tree_rules
+            dt_path = out_dir / "decision_tree_rules.png"
+            plot_decision_tree_rules(decision_rules, dt_path, dpi=200)
+            written.append(dt_path.name)
+        except Exception:
+            pass
+    elif features is not None and state_assignments is not None and not state_assignments.empty:
+        try:
+            from molscope.analysis.discovery.decision_tree import DecisionTreeExplainer
+            from molscope.visualization.rules import plot_decision_tree_rules
+            s_cand = None
+            for c in ("State_Label", "State", "Cluster"):
+                if c in state_assignments.columns:
+                    s_cand = c
+                    break
+            if s_cand:
+                labels = state_assignments[s_cand].dropna()
+                if labels.nunique() >= 2:
+                    min_leaf = max(3, len(labels) // 200)
+                    dt_expl = DecisionTreeExplainer(max_depth=3, min_samples_leaf=min_leaf)
+                    dt_expl.fit(features.loc[labels.index], labels)
+                    dt_path = out_dir / "decision_tree_rules.png"
+                    plot_decision_tree_rules(dt_expl, dt_path, dpi=200)
+                    written.append(dt_path.name)
+        except Exception:
+            pass
     if (predictive_ranking is not None and supervised_model_summary is not None
             and {"Feature_Group", "Trajectory_Mean_Accuracy_Drop_Mean"}.issubset(predictive_ranking)
             and {"Model", "Trajectory_Mean_Accuracy_Mean"}.issubset(supervised_model_summary)):
