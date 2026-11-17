@@ -289,9 +289,15 @@ def inspect_md_inputs(
     times = []
     finite_coordinates = True
     periodic_frames = 0
+    frames_checked = 0
     for frame_index in indices:
-        timestep = universe.trajectory[frame_index]
-        positions = universe.atoms.positions
+        try:
+            timestep = universe.trajectory[frame_index]
+            positions = universe.atoms.positions
+        except Exception as exc:
+            errors.append(f"Unable to read trajectory frame {frame_index}: {type(exc).__name__}: {exc}")
+            break
+        frames_checked += 1
         if not np.isfinite(positions).all():
             finite_coordinates = False
         time_value = _number_or_none(getattr(timestep, "time", None))
@@ -313,7 +319,7 @@ def inspect_md_inputs(
         warnings.append("Trajectory reader did not provide finite frame times.")
     if max_frames is not None and len(indices) < frame_count:
         warnings.append("Coordinate integrity check used a limited frame subset.")
-    if periodic_frames not in {0, len(indices)}:
+    if periodic_frames not in {0, frames_checked}:
         warnings.append("Periodic-cell metadata is present for only some inspected frames.")
 
     timestep_ps = _number_or_none(getattr(universe.trajectory, "dt", None))
@@ -322,15 +328,15 @@ def inspect_md_inputs(
         topology_atom_count=topology_info.atom_count,
         trajectory_atom_count=trajectory_atom_count,
         frame_count=frame_count,
-        frames_checked=len(indices),
+        frames_checked=frames_checked,
         frame_stride=frame_stride,
         time_start_ps=times[0] if times else None,
         time_end_ps=times[-1] if times else None,
         timestep_ps=timestep_ps,
         time_monotonic=time_monotonic,
-        finite_coordinates=finite_coordinates if indices else None,
-        periodic_cell_frame_fraction=(periodic_frames / len(indices)) if indices else None,
-        complete_scan=len(indices) == frame_count,
+        finite_coordinates=finite_coordinates if frames_checked else None,
+        periodic_cell_frame_fraction=(periodic_frames / frames_checked) if frames_checked else None,
+        complete_scan=frames_checked == frame_count and not errors,
         warnings=tuple(warnings),
     )
     status = (
