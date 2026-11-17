@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import numpy as np
 import pandas as pd
 
 from molscope.analysis.discovery.representation import RepresentationDiscoveryConfig, discover_representation_features
