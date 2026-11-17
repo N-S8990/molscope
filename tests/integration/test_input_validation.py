@@ -1,6 +1,10 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import MDAnalysis as mda
 
 from molscope.ingestion import InputIntegrityStatus, inspect_md_inputs, topology_identity
 
@@ -65,6 +69,35 @@ class IngestionTests(unittest.TestCase):
             report = inspect_md_inputs(trajectory, trajectory, max_frames=1)
         self.assertFalse(report.trajectory.complete_scan)
         self.assertIn("limited frame subset", " ".join(report.warnings))
+
+    def test_unreadable_later_frame_returns_invalid_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            trajectory = Path(temporary) / "trajectory.pdb"
+            trajectory.write_text(TRAJECTORY, encoding="utf-8")
+            topology_universe = mda.Universe(str(trajectory))
+            coordinate_universe = mda.Universe(str(trajectory), str(trajectory))
+
+            class FailingReader:
+                n_atoms = 3
+                dt = 1.0
+
+                def __len__(self):
+                    return 2
+
+                def __getitem__(self, frame):
+                    if frame == 1:
+                        raise OSError("unreadable frame")
+                    return coordinate_universe.trajectory[frame]
+
+            fake_universe = SimpleNamespace(atoms=coordinate_universe.atoms,
+                                            trajectory=FailingReader())
+            with patch("molscope.io.validation.mda.Universe",
+                       side_effect=[topology_universe, fake_universe]):
+                report = inspect_md_inputs(trajectory, trajectory)
+        self.assertEqual(report.status, InputIntegrityStatus.INVALID)
+        self.assertEqual(report.trajectory.frames_checked, 1)
+        self.assertFalse(report.trajectory.complete_scan)
+        self.assertIn("frame 1", " ".join(report.errors))
 
 
 if __name__ == "__main__":
