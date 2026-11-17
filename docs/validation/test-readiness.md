@@ -83,7 +83,7 @@ This exercises extraction only; it does not establish benchmark performance.
 - **P1.3 Biophysical Reference Validation:** 27 tests in `tests/reference/` verifying numerical agreement against MDAnalysis and FreeSASA within strict physical tolerances ($10^{-5}$ Å for Cα distances, $10^{-3}$ deg for dihedrals $\phi, \psi, \omega$, and exact atom-pair matches for H-bonds, PLIF, and DSSP). Detailed in [feature validation matrix](feature-validation-matrix.md).
 - **P2.1 & P2.2 Statistical ML Rigor:** Seed stability testing, bootstrap cluster stability, clustering validity indices (Silhouette, Davies-Bouldin, Calinski-Harabasz), simulation autocorrelation/drift diagnostics, dummy baseline classifier, and zero-leakage grouped cross-validation.
 - **P3.3 OpenMM Simulation Pipeline & Recovery:** End-to-end plan generation, dry-run validation, compressed byte size estimation, and checkpoint segment recovery preserving parent replica identity tested and verified in `tests/integration/test_openmm_simulation_pipeline.py`.
-- **P4.1 & P4.2 Release Hygiene & Packaging:** Apache-2.0 `LICENSE`, `CITATION.cff`, `CHANGELOG.md`, `.github/workflows/ci.yml`, `.coveragerc`, and formal JSON schema versioning with migration tests (`schemas/project.schema.json`).
+- **P4.1 & P4.2 Release Hygiene & Packaging:** Apache-2.0 `LICENSE`, `CHANGELOG.md`, `.github/workflows/ci.yml`, `.coveragerc`, and formal JSON schema versioning with migration tests (`schemas/project.schema.json`).
 - **P4.4 2RJY Tutorial:** Comprehensive step-by-step tutorial published in `docs/tutorials/2rjy_villin_tutorial.md`.
 
 Keep these boundaries visible during user testing; unavailable analyses retain
