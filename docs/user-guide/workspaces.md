@@ -46,10 +46,10 @@ use it with an existing session reader that expects the original flat layout.
 Report-local links preserve relative table and image references. Failed runs
 retain their log and failure status; choose a new run ID for a retry.
 
-In this checkout, `studies/` is an ignored local convenience location. For
-ongoing research, initialize a workspace outside the source repository.
-Historical `results/` outputs remain in place to preserve embedded absolute
-paths. Do not relocate checkpoint bundles without checking their provenance.
+Study data and generated runs belong in an ignored workspace. For ongoing
+research, initialize a workspace outside the source repository. Smoke runs and
+downloaded test datasets are removed from the source checkout after validation.
+Do not relocate checkpoint bundles without checking their provenance.
 
 Inputs can remain in their original storage location and be referenced from
 `project.json`; do not copy large trajectories just to match a directory tree.
