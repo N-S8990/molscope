@@ -15,9 +15,21 @@ from molscope.core.project import load_project_spec
 
 
 def _target_column(project, task_id: str | None) -> str | None:
-    """Resolve an explicitly declared predictive task to a manifest column."""
+    """Select a declared target automatically when the choice is unambiguous."""
     if task_id is None:
-        return None
+        if len(project.prediction_tasks) == 1:
+            task_id = project.prediction_tasks[0].task_id
+        elif len(project.prediction_tasks) > 1:
+            raise ValueError("Multiple prediction tasks are declared; select one with --prediction-task.")
+        else:
+            trajectory_ids = {item.trajectory_id for item in project.trajectory_inputs()}
+            labels = [label for label in project.labels if label.label_type == "categorical"
+                      and set(label.assignments) == trajectory_ids]
+            if len(labels) == 1:
+                return f"metadata_label_{labels[0].label_id}"
+            if len(labels) > 1:
+                raise ValueError("Multiple complete categorical labels are declared; define a prediction task and select it with --prediction-task.")
+            return None
     tasks = {task.task_id: task for task in project.prediction_tasks}
     if task_id not in tasks:
         raise ValueError(f"Unknown prediction task {task_id!r}; declared tasks: {sorted(tasks)}")
@@ -31,7 +43,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Run configured extraction, target-free ML discovery, SAM-MFP, state discovery, "
-            "and optionally leakage-aware predictive ML from an MolScope project JSON."
+            "and automatically run leakage-aware predictive ML when a unique declared target exists."
         )
     )
     parser.add_argument("--project", required=True, help="Validated MolScope project JSON.")
@@ -40,14 +52,14 @@ def main() -> None:
     parser.add_argument("--states", type=int, default=2)
     parser.add_argument("--supervised-folds", type=int, default=3)
     parser.add_argument("--feature-costs", help="Optional measured feature-cost CSV.")
-    parser.add_argument("--prediction-task", help="Declared task ID; enables grouped predictive ML.")
+    parser.add_argument("--prediction-task", help="Choose among multiple declared prediction tasks.")
     parser.add_argument("--extract-only", action="store_true", help="Validate, extract, and write an extraction report, including single-trajectory studies; skip ML discovery.")
     args = parser.parse_args()
 
     project = load_project_spec(args.project)
     if args.extract_only and args.prediction_task:
         parser.error("--extract-only cannot be combined with --prediction-task")
-    target_column = _target_column(project, args.prediction_task)
+    target_column = None if args.extract_only else _target_column(project, args.prediction_task)
     costs = pd.read_csv(args.feature_costs) if args.feature_costs else None
     pipeline = MDContactMLPipeline(
         DiscoveryPipelineConfig(
