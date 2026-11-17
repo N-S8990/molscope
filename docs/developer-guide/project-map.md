@@ -14,7 +14,6 @@
 | `docs/scientific-methods/` | Methods, assumptions, and research boundaries |
 | `docs/developer-guide/` | Architecture and contribution guidance |
 | `docs/validation/` | Test procedures and measured evidence |
-| `docs/archive/` | Historical numbered development notes |
 
 See [Architecture](architecture.md) for ownership and
 [CLI reference](../user-guide/cli.md) for supported workflows.
@@ -23,3 +22,8 @@ Generated artifacts belong in a study workspace. Existing historical outputs
 retain provenance and compatibility paths; do not edit source inputs or flatten
 restart segments into independent replicas. The separately retained
 `/Users/nirav/Docs/MD-ContactML` project is outside this repository's scope.
+
+The small flat modules directly under `src/molscope/` are compatibility adapters
+for existing imports and `python -m molscope.<module>` commands. New scientific
+implementation belongs in the domain packages under that directory, not in the
+adapters. Historical development notes are available through Git history.
