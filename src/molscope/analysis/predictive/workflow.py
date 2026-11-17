@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-
+from typing import Any
 import warnings
 
 import numpy as np
@@ -27,18 +27,31 @@ class MLWorkflowConfig:
     rf_max_depth: int | None = 6
     rf_min_samples_leaf: int = 5
     lr_c: float = 0.5
+    block_chunk_size: int = 30
+    block_embargo: int = 2
+    allow_inapplicable: bool = False
 
     def __post_init__(self):
         if self.n_splits < 2:
             raise ValueError("n_splits must be at least 2.")
         if self.rf_estimators < 1 or self.bootstrap_samples < 1:
             raise ValueError("rf_estimators and bootstrap_samples must be positive.")
+        if self.block_chunk_size < 1:
+            raise ValueError("block_chunk_size must be at least 1.")
+        if self.block_embargo < 0:
+            raise ValueError("block_embargo cannot be negative.")
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
-def validate_ml_inputs(features: pd.DataFrame, manifest: pd.DataFrame, target_column: str) -> None:
+def validate_ml_inputs(
+    features: pd.DataFrame,
+    manifest: pd.DataFrame,
+    target_column: str,
+    *,
+    allow_inapplicable: bool = False,
+) -> list[str]:
     required = {"trajectory_id", target_column}
     missing = required - set(manifest.columns)
     if missing:
@@ -55,11 +68,12 @@ def validate_ml_inputs(features: pd.DataFrame, manifest: pd.DataFrame, target_co
         raise ValueError("Feature matrix has no columns.")
     numeric = features.apply(pd.to_numeric, errors="coerce")
     bad = numeric.columns[~np.isfinite(numeric.to_numpy(dtype=float)).all(axis=0)].tolist()
-    if bad:
+    if bad and not allow_inapplicable:
         raise ValueError(
             "ML workflow does not silently impute invalid values. Filter unavailable features first; "
             f"invalid columns include: {bad[:8]}"
         )
+    return bad
 
 
 def _models(config: MLWorkflowConfig) -> dict[str, Any]:
@@ -155,7 +169,7 @@ def _fold_resampling_interval(values: np.ndarray, samples: int, random_state: in
     return float(np.quantile(means, 0.025)), float(np.quantile(means, 0.975))
 
 
-def _purged_block_splits(
+def purged_temporal_block_splits(
     metadata: pd.DataFrame,
     y: np.ndarray,
     n_splits: int,
@@ -177,21 +191,29 @@ def _purged_block_splits(
 
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
     splits = []
+    traj_ids = metadata["trajectory_id"].to_numpy() if "trajectory_id" in metadata.columns else None
     for train_chunk_idx, test_chunk_idx in skf.split(chunk_indices, chunk_labels):
         test_frames = np.concatenate([chunk_indices[i] for i in test_chunk_idx])
         train_raw = np.concatenate([chunk_indices[i] for i in train_chunk_idx])
-        if embargo > 0 and len(train_raw) > 20:
+        if embargo > 0:
             embargoed = set()
             for tf in test_frames:
+                current_traj = traj_ids[tf] if traj_ids is not None else None
                 for offset in range(-embargo, embargo + 1):
-                    embargoed.add(tf + offset)
+                    neighbor = tf + offset
+                    if 0 <= neighbor < n_frames:
+                        if traj_ids is None or traj_ids[neighbor] == current_traj:
+                            embargoed.add(neighbor)
             train_frames = np.array([idx for idx in train_raw if idx not in embargoed])
-            if len(train_frames) < 10:
+            if len(train_frames) < n_splits or len(np.unique(y[train_frames])) < 2:
                 train_frames = train_raw
         else:
             train_frames = train_raw
         splits.append((train_frames, test_frames))
     return splits
+
+
+_purged_block_splits = purged_temporal_block_splits
 
 
 def run_grouped_ml_workflow(
@@ -208,8 +230,12 @@ def run_grouped_ml_workflow(
     The primary importance endpoint is drop in trajectory-mean accuracy. This
     avoids presenting correlated frame count as the effective sample size.
     """
-    validate_ml_inputs(features, manifest, target_column)
+    bad_columns = validate_ml_inputs(features, manifest, target_column, allow_inapplicable=config.allow_inapplicable)
     x = features.apply(pd.to_numeric, errors="coerce").reset_index(drop=True)
+    if bad_columns:
+        x = x.drop(columns=bad_columns)
+        if x.empty:
+            raise ValueError("All features in matrix contain non-finite values; no valid features remaining for ML.")
     metadata = manifest.reset_index(drop=True)
     y = metadata[target_column].to_numpy()
     groups = metadata["trajectory_id"].to_numpy()
@@ -255,7 +281,14 @@ def run_grouped_ml_workflow(
             raise ValueError(
                 f"Target column {target_column!r} requires at least 2 distinct classes with at least {config.n_splits} frames each."
             )
-        block_splits = _purged_block_splits(metadata, y, config.n_splits, config.random_state)
+        block_splits = _purged_block_splits(
+            metadata,
+            y,
+            config.n_splits,
+            config.random_state,
+            chunk_size=config.block_chunk_size,
+            embargo=config.block_embargo,
+        )
         for fold, (train_index, test_index) in enumerate(block_splits, start=1):
             splits.append((train_index, test_index))
             for idx in test_index:
@@ -366,5 +399,35 @@ def run_grouped_ml_workflow(
     predictive_ranking.insert(2, "Interpretation", "predictive_association_not_causality")
     predictive_ranking.insert(3, "Accuracy_Change_Definition", "baseline_minus_without_group;positive_drop_means_group_helped_prediction")
     predictive_ranking.insert(4, "Uncertainty_Qualification", "fold_resampling_is_descriptive_not_independent_replica_confidence_interval")
+    predictive_ranking["Ranking_Status"] = "ranked"
+    predictive_ranking["Status_Reason"] = "Evaluated via trajectory-grouped LOFO cross-validation."
+    if bad_columns:
+        inapplicable_rows = []
+        for col in sorted(bad_columns):
+            group_name = feature_groups.get(col, col) if feature_groups else col
+            inapplicable_rows.append({
+                "Ranking_Evidence": "inapplicable_or_missing_observations",
+                "Importance_Endpoint": "trajectory_mean_accuracy_drop",
+                "Interpretation": "excluded_from_ranking_without_silent_imputation",
+                "Accuracy_Change_Definition": "baseline_minus_without_group;positive_drop_means_group_helped_prediction",
+                "Uncertainty_Qualification": "not_applicable_excluded_feature",
+                "Feature_Group": group_name,
+                "Feature_Count": 1,
+                "Outer_Folds": 0,
+                "Baseline_Trajectory_Mean_Accuracy": np.nan,
+                "Without_Group_Trajectory_Mean_Accuracy": np.nan,
+                "Trajectory_Mean_Accuracy_Drop_Mean": np.nan,
+                "Trajectory_Mean_Accuracy_Gain_Without_Group": np.nan,
+                "Trajectory_Mean_Accuracy_Drop_Fold_Resample_Lower": np.nan,
+                "Trajectory_Mean_Accuracy_Drop_Fold_Resample_Upper": np.nan,
+                "Frame_Accuracy_Drop_Mean": np.nan,
+                "Mean_Rank": np.nan,
+                "Rank_Std": np.nan,
+                "Positive_Drop_Frequency": np.nan,
+                "Rank": np.nan,
+                "Ranking_Status": "inapplicable",
+                "Status_Reason": "Feature contains non-finite or missing values; excluded without silent imputation.",
+            })
+        predictive_ranking = pd.concat([predictive_ranking, pd.DataFrame(inapplicable_rows)], ignore_index=True)
     outputs["predictive_feature_ranking"] = predictive_ranking
     return outputs
