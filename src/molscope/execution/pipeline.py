@@ -17,7 +17,7 @@ from molscope.io.validation import inspect_md_inputs, InputIntegrityStatus
 from molscope.profiling.system import profile_system
 from molscope.features.plugins import get_plugin
 from molscope.core.project import ProjectSpec, load_project_spec
-from molscope.reporting.research import render_report_figures
+from molscope.reporting.research import render_report_figures, write_result_guide
 from molscope.io.storage import FeatureCache, extraction_cache_key, read_table, write_table
 
 
@@ -202,22 +202,77 @@ class MDContactMLPipeline:
     def write_results(self, output_dir: str | Path) -> Path:
         if self.outputs is None:
             raise RuntimeError("Run the pipeline before writing results.")
+        import shutil
         destination = Path(output_dir)
         destination.mkdir(parents=True, exist_ok=True)
+
+        tables_dir = destination / "tables"
+        figures_dir = destination / "figures"
+        audit_dir = destination / "audit"
+        viz_dir = destination / "3d_visualization"
+        for sub in (tables_dir, figures_dir, audit_dir, viz_dir):
+            sub.mkdir(parents=True, exist_ok=True)
+
         for name, value in self.outputs.items():
             if isinstance(value, pd.DataFrame):
+                value.to_csv(tables_dir / f"{name}.csv", index=False)
                 value.to_csv(destination / f"{name}.csv", index=False)
+
         if self.extraction_evidence:
-            (destination / "extraction_evidence.json").write_text(json.dumps({"trajectories": self.extraction_evidence}, indent=2) + "\n", encoding="utf-8")
-        (destination / "research_report.md").write_text(str(self.outputs["research_report_markdown"]) + "\n", encoding="utf-8")
-        (destination / "research_report.json").write_text(json.dumps(self.outputs["research_report_summary"], indent=2) + "\n", encoding="utf-8")
-        render_report_figures(
+            evidence_json = json.dumps({"trajectories": self.extraction_evidence}, indent=2) + "\n"
+            (audit_dir / "extraction_evidence.json").write_text(evidence_json, encoding="utf-8")
+            (destination / "extraction_evidence.json").write_text(evidence_json, encoding="utf-8")
+
+        report_md = str(self.outputs["research_report_markdown"]) + "\n"
+        (destination / "research_report.md").write_text(report_md, encoding="utf-8")
+        (destination / "summary.md").write_text(report_md, encoding="utf-8")
+
+        report_json = json.dumps(self.outputs["research_report_summary"], indent=2) + "\n"
+        (audit_dir / "research_report.json").write_text(report_json, encoding="utf-8")
+        (destination / "research_report.json").write_text(report_json, encoding="utf-8")
+
+        figures = render_report_figures(
             self.table("sam_mfp_candidates"), self.table("state_populations"), destination,
             quality=self.table("feature_quality_metrics"),
             representation_salience=self.table("representation_feature_salience"),
             predictive_ranking=self.table("supervised_predictive_feature_ranking") if "supervised_predictive_feature_ranking" in self.outputs else None,
             state_explanatory_ranking=self.table("state_explanatory_feature_ranking"),
+            features=self.features,
+            representation_coordinates=self.table("representation_coordinates"),
+            supervised_model_summary=self.table("supervised_model_summary") if "supervised_model_summary" in self.outputs else None,
         )
+        for fig_name in figures:
+            src_f = destination / fig_name
+            if src_f.is_file():
+                shutil.copy2(src_f, figures_dir / fig_name)
+
+        write_result_guide(destination, self.outputs, figures)
+
+        # Generate single interactive HTML dashboard
+        from molscope.reporting.html_report import generate_html_report
+        generate_html_report(
+            destination=destination,
+            outputs=self.outputs,
+            manifest=self.manifest,
+            features=self.features,
+            figures=figures,
+        )
+
+        # Auto-generate 3D visualization if topology exists
+        if self.manifest is not None and "topology_path" in self.manifest.columns:
+            top_paths = [p for p in self.manifest["topology_path"].dropna().unique() if Path(p).is_file()]
+            if top_paths:
+                from molscope.reporting.pymol import export_3d_visualization, extract_residue_scores
+                score_tbl = self.table("sam_mfp_candidates") if "sam_mfp_candidates" in self.outputs else self.table("representation_feature_salience")
+                score_col = "PCA_Salience" if "PCA_Salience" in score_tbl.columns else score_tbl.select_dtypes(include="number").columns[0]
+                res_scores = extract_residue_scores(score_tbl, score_column=score_col)
+                export_3d_visualization(
+                    topology=top_paths[0],
+                    output_dir=viz_dir,
+                    residue_scores=res_scores,
+                    basename="molscope_3d",
+                )
+
         return destination
 
     def save_session(self, session_dir: str | Path) -> Path:
