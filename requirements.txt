@@ -3,10 +3,11 @@ pandas>=2.0.0
 scipy>=1.10.0
 scikit-learn>=1.3.0
 matplotlib>=3.7.0
-seaborn>=0.12.0
+plotly>=5.0.0
 MDAnalysis>=2.5.0
 networkx>=3.0.0
 tqdm>=4.65.0
+pyarrow>=14.0.0
 openmm>=8.1.0
 pdbfixer @ git+https://github.com/openmm/pdbfixer.git
 freesasa>=2.2,<3
