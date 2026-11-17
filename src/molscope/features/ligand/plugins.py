@@ -19,6 +19,9 @@ from molscope.core.contracts import ApplicabilityStatus, FeatureAssessment, Feat
 from molscope.profiling.system import SystemProfile, discover_component_selections, profile_system
 
 from molscope.features.base import PluginResult, FeaturePlugin, _safe_id
+from molscope.features.ligand.plif import ProteinLigandInteractionFingerprintPlugin
+
+__all__ = ["ProteinLigandContactPlugin", "ProteinLigandInteractionFingerprintPlugin"]
 
 
 class ProteinLigandContactPlugin:
