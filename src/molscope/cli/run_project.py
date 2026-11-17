@@ -42,8 +42,8 @@ def _target_column(project, task_id: str | None) -> str | None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Run configured extraction, target-free ML discovery, SAM-MFP, state discovery, "
-            "and automatically run leakage-aware predictive ML when a unique declared target exists."
+            "Run configured extraction, state/cluster discovery, SAM-MFP Pareto prioritization, "
+            "and mandatory leakage-aware predictive ML across all features based on all data."
         )
     )
     parser.add_argument("--project", required=True, help="Validated MolScope project JSON.")
