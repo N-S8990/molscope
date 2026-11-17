@@ -58,6 +58,7 @@ class SystemProfile:
     capabilities: frozenset[str]
     has_periodic_cell: bool
     has_bonds: bool
+    wrapped_coordinates_detected: bool = False
     warnings: tuple[str, ...] = ()
     schema_version: str = "1"
 
@@ -193,6 +194,7 @@ def profile_system(topology: str | Path, trajectory: str | Path | None = None) -
 
     caps = _capabilities(components, universe, inspect_trajectory=trajectory is not None)
     warnings = []
+    wrapped_coordinates_detected = False
     if "bonds" not in caps:
         warnings.append("No bond topology is available; bond-dependent analyses require supplied connectivity.")
     if "periodic_cell" not in caps:
@@ -202,6 +204,15 @@ def profile_system(topology: str | Path, trajectory: str | Path | None = None) -
             "Periodic-cell metadata is present; confirm that the simulation used PBC and that coordinates are "
             "properly imaged before interpreting PBC-sensitive analyses."
         )
+        if trajectory is not None:
+            try:
+                from molscope.io.validation import detect_pbc_wrapping_artifacts
+                pbc_res = detect_pbc_wrapping_artifacts(universe, frame_index=0)
+                if pbc_res["wrapped_coordinates_detected"] or pbc_res["broken_bonds_detected"]:
+                    wrapped_coordinates_detected = True
+                    warnings.extend(pbc_res["warnings"])
+            except Exception:
+                pass
     if not components:
         warnings.append("No residues were detected in the supplied topology.")
 
@@ -213,5 +224,6 @@ def profile_system(topology: str | Path, trajectory: str | Path | None = None) -
         capabilities=frozenset(caps),
         has_periodic_cell="periodic_cell" in caps,
         has_bonds="bonds" in caps,
+        wrapped_coordinates_detected=wrapped_coordinates_detected,
         warnings=tuple(warnings),
     )
