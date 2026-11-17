@@ -40,3 +40,20 @@ class FeaturePlugin(Protocol):
 
 def _safe_id(value: str) -> str:
     return "".join(character if character.isalnum() else "_" for character in value).strip("_")
+
+
+def _chain_or_segment_id(atom_group) -> str:
+    """Return a stable topology scope when chain identifiers are unavailable."""
+    try:
+        chain_ids = {value.strip() for value in atom_group.chainIDs if value and value.strip()}
+    except (AttributeError, mda.exceptions.NoDataError):
+        chain_ids = set()
+    if len(chain_ids) == 1:
+        return f"chain_{next(iter(chain_ids))}"
+    try:
+        segment_ids = {value.strip() for value in atom_group.segids if value and value.strip()}
+    except (AttributeError, mda.exceptions.NoDataError):
+        segment_ids = set()
+    if len(segment_ids) == 1:
+        return f"segment_{next(iter(segment_ids))}"
+    return "unlabeled"
