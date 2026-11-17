@@ -6,6 +6,21 @@ from molscope.sam_mfp import prioritize_sam_mfp
 
 
 class SAMMFPTests(unittest.TestCase):
+    def test_empty_eligible_set_does_not_claim_measured_cost(self):
+        quality = pd.DataFrame({
+            "Feature": ["unvalidated"], "Resolution": ["frame"],
+            "Valid_Fraction": [1.0], "ESS_Ratio": [0.8],
+            "Replica_Consistency": [float("nan")], "Occupancy_Entropy": [0.5],
+            "Uniqueness": [0.7], "Measured_Cost_Seconds": [float("nan")],
+        })
+        discovery = pd.DataFrame({
+            "Feature": ["unvalidated"], "PCA_Salience": [0.4],
+            "LOTO_Rank_Std_Normalized": [0.1], "LOTO_Folds": [3],
+        })
+        result, _ = prioritize_sam_mfp(quality, discovery)
+        self.assertFalse(result.loc[0, "SAM_MFP_Eligible"])
+        self.assertEqual(result.loc[0, "Cost_Objective_Status"], "excluded_missing_measurements")
+
     def test_returns_pareto_candidates_without_a_scalar_importance_score(self):
         quality = pd.DataFrame({
             "Feature": ["stable_informative", "unstable"], "Resolution": ["frame", "frame"],
