@@ -34,13 +34,13 @@ targets. State 0 in one trajectory is not necessarily state 0 in another.
 The project wrapper requires a fresh output directory and does not resume;
 individual extraction stores support the resume command below.
 
-The local 2RJY smoke fixture is configured for 100 frames at stride 5. Its paths
-refer to the local mdxplain data checkout; update them on another machine:
+For a smoke test, configure the project for a small frame cap and supported
+plugins before running:
 
 ```bash
 python -m molscope.stream_project \
-  --project examples/local_2rjy_stream_project.json \
-  --out-dir results/2rjy_stream_project --geometry-selection protein \
+  --project /path/to/study/project.json \
+  --out-dir /path/to/study/runs/stream-smoke --geometry-selection protein \
   --sample-rows 100 --batch-rows 25 --chunk-size 25 --states 3 \
   --memory-budget-mb 512 --imaging-policy as_stored_nonperiodic
 ```
