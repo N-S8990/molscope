@@ -76,10 +76,18 @@ class SystemProfile:
 
 def _chain_or_segment(atom_group: mda.core.groups.AtomGroup) -> str:
     """Choose an existing topology identifier without assuming chain A/B."""
-    chain_ids = {value.strip() for value in atom_group.chainIDs if value and value.strip()}
+    try:
+        chain_values = atom_group.chainIDs
+    except (AttributeError, mda.exceptions.NoDataError):
+        chain_values = ()
+    chain_ids = {value.strip() for value in chain_values if value and value.strip()}
     if len(chain_ids) == 1:
         return f"chain:{next(iter(chain_ids))}"
-    segids = {value.strip() for value in atom_group.segids if value and value.strip()}
+    try:
+        segment_values = atom_group.segids
+    except (AttributeError, mda.exceptions.NoDataError):
+        segment_values = ()
+    segids = {value.strip() for value in segment_values if value and value.strip()}
     if len(segids) == 1:
         return f"segment:{next(iter(segids))}"
     return "unlabeled"
