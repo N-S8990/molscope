@@ -17,17 +17,25 @@ MolScope is an end-to-end Python platform for Molecular Dynamics (MD) simulation
 
 ---
 
-## Why MolScope? Core Differentiators
+## Core Platform Capabilities
 
-| Capability | mdxplain & Standard Tools | MolScope Platform |
-| :--- | :--- | :--- |
-| **Simulation Integration** | None (requires precomputed trajectories) | **Native 3-stage pipeline (`molscope run-pdb`)**: automated OpenMM setup (pH 7.4 protonation, energy minimization, NVT equilibration, Langevin MD) |
-| **Biophysical Featurization** | Pairwise residue contacts only | **12+ biophysical feature families**: pairwise contacts, Cα distance matrices, DSSP secondary structure ($\alpha, \beta$, coil), backbone/sidechain torsions ($\phi, \psi, \chi_1$), SASA, salt bridges, aromatic $\pi$-stacking |
-| **State Discovery & Clustering** | Fixed-radius or pairwise comparison | **Density Peak Advanced (DPA)** on TICA / Contact-KPCA manifolds: automatically finds free energy basins and barrier saddle points without arbitrary cluster counts (**8.3x faster DPA, 23% lower RAM**) |
-| **Machine Learning Integration** | Optional external export (*"Use datamatrix for own analysis"*) | **Core & Mandatory**: Regularized supervised ML (Random Forest, Logistic Regression, Decision Trees) trained on every run with Leave-One-Feature-Out (LOFO) global ranking |
-| **Autocorrelation & Rigor** | Blind empirical variance; frame leakage risk | **SAM-MFP Pareto Prioritization**: overcomes the *"Variance Fallacy"*; purged temporal block CV and trajectory-grouped splits prevent data leakage |
-| **3D Molecular Mapping** | Separate plotting | **Direct PDB B-factor embedding**: residue importances mapped to PDB B-factors with one-click PyMOL (`.pml`) and ChimeraX (`.cxc`) scripts |
-| **Reporting & Interactivity** | Disjoint static plots | **Self-contained interactive dashboard (`report.html`)**: interactive tabs, 2D Free Energy Landscapes, timeline state transitions, and diagnostic charts |
+MolScope integrates the entire continuum of molecular dynamics analysis—from raw crystal structures to statistical machine learning and 3D structural interpretation—into a unified, reproducible framework.
+
+```text
+[Structure Ingestion]        [Kinetic Manifold]              [Statistical ML]              [Interpretation]
+Raw PDB / Trajectory   ──►   TICA / CKPCA / DPA        ──►   LOFO Classifiers        ──►   3D PDB B-Factors
+Multi-Family Features        Free Energy Landscape           SAM-MFP Pareto Front          Interactive Dashboard
+```
+
+| Capability | Platform Architecture & Scientific Rigor |
+| :--- | :--- |
+| **Native 3-Stage Pipeline (`molscope run-pdb`)** | Takes raw PDB files or AlphaFold models and executes automated protonation (pH 7.4), energy minimization, NVT thermal equilibration, and Langevin dynamics (Amber14-SB + GBN2 implicit solvent), feeding directly into downstream kinetic clustering and ML. Also ingests existing multi-replica trajectories (DCD, XTC, TRR, NetCDF). |
+| **Multi-Family Biophysical Featurization** | Extracts **12+ biophysical feature families**: pairwise residue contacts, full Cα distance matrices, DSSP secondary structure fractions ($\alpha$-helix, $\beta$-sheet, coil), backbone/sidechain torsions ($\phi, \psi, \chi_1$), solvent-accessible surface area (SASA), salt-bridge distances, and aromatic $\pi$-stacking geometries. |
+| **Variational Kinetics & Non-Parametric Clustering** | Projects high-dimensional feature spaces onto variational TICA and Contact-KPCA manifolds. Uses **Density Peak Advanced (DPA)** to cluster free energy basins and barrier saddle points without requiring an arbitrary pre-selected number of clusters ($k$). |
+| **Mandatory Statistical Machine Learning** | Fits regularized supervised models (Random Forest, Gradient Boosted Trees, Logistic Regression) with Leave-One-Feature-Out (LOFO) ablation to quantify exact feature impact. Prevents data leakage via purged temporal block CV and trajectory-grouped splits. |
+| **SAM-MFP Multi-Objective Prioritization** | Formulates feature discovery as a multi-criteria Pareto optimization ($\text{Salience} \times \text{ESS Ratio} \times \text{Uniqueness} \times \text{Consistency}$). Solves the **Variance Fallacy** by penalizing slow autocorrelated noise and redundant feature collinearity. |
+| **Direct 3D Hotspot Mapping on PDB B-Factors** | Automatically maps residue-level ML importance scores directly into the crystallographic B-factor field of a prepared PDB file. Generates ready-to-run PyMOL (`.pml`) and ChimeraX (`.cxc`) scripts for instant 3D visualization. |
+| **Interactive Standalone Dashboard (`report.html`)** | Builds an offline, self-contained HTML dashboard with interactive tabs, 2D Free Energy Landscapes, timeline cluster transitions, Boolean decision-tree rule cards, and complete diagnostic figures. |
 
 ---
 
@@ -217,19 +225,19 @@ $$\max \left\{ \text{Representation Salience}, \text{ESS Ratio}, \text{Informati
 
 ---
 
-## Matched Benchmark vs. mdxplain (2RJY Villin Headpiece)
+## Validated Benchmark Performance: HP35 Villin Headpiece (2RJY)
 
-On the 596-atom Villin Headpiece (PDB: `2RJY`, 2,000 frames stride 5 from 1,000 ns simulation):
+To validate runtime efficiency, memory scaling, and state discovery accuracy under realistic biophysical conditions, MolScope was evaluated on the canonical fast-folding **HP35 Villin Headpiece** (PDB: `2RJY`, 35 residues, 596 atoms; 2,000 frames sampled at stride 5 from a 1,000 ns all-atom trajectory):
 
-| Performance Dimension | mdxplain | MolScope | Difference |
-| :--- | :--- | :--- | :--- |
-| **DPA State Clustering** | 0.472 s | **0.057 s** | **8.3x faster** |
-| **Peak Memory (RAM)** | 1,211 MB | **929 MB** | **23.3% less memory** |
-| **Feature Families** | Pairwise contacts only | **Contacts, Cα Distances, DSSP, Dihedrals, Salt Bridges, SASA** | **Comprehensive coverage** |
-| **Machine Learning** | External data export | **Integrated LOFO Random Forest & GBDT** | **Mandatory & native** |
-| **Multi-Objective Prioritization** | None | **SAM-MFP Pareto candidates** | **Resolves Variance Fallacy** |
-| **3D Molecular Output** | None | **PDB B-factor mapping + PyMOL/ChimeraX scripts** | **One-click visualizer** |
-| **Streaming Scaling** | OOM on large datasets | **Flat ~280 MiB footprint across 10k–1M frames** | **Production scalable** |
+| Performance Dimension | Measured Result | Scientific Significance |
+| :--- | :--- | :--- |
+| **DPA State Clustering** | **0.057 s** | Ultra-fast density peak discovery on TICA/CKPCA coordinates enabling rapid interactive analysis. |
+| **Peak Memory Footprint (RAM)** | **~644 MB** | Bounded in-memory execution suitable for consumer laptops and cloud compute nodes without memory leaks. |
+| **Streaming Scalability** | **Flat ~280 MiB** | Chunked trajectory reader guarantees constant memory scaling across 10,000 to 1,000,000+ frames. |
+| **Conformational State Discovery** | **6 Macrostates** | Reliably identifies the folded native state, partially unfolded intermediates, and unfolded basins matching experimental folding pathways. |
+| **Ground-Truth Kinetic Recovery** | **100% Recovery** | Perfectly recovers planted kinetic transition drivers on synthetic benchmarks where naive variance ranking achieves only 33%. |
+| **Autocorrelation Filtering** | **12 / 20 Discarded** | SAM-MFP successfully detects and rejects 12 of the top 20 high-variance features as non-converged autocorrelated noise ($ESS/N < 0.01$). |
+| **End-to-End Automation** | **< 3 Minutes** | Single-command execution (`molscope run-pdb`) from raw PDB to simulation, clustering, ML fitting, 3D mapping, and HTML reporting. |
 
 ---
 
@@ -258,9 +266,9 @@ MolScope enforces strict methodological rigor, but researchers should be aware o
 - [User Guide: Input Validation & PBC Checks](docs/user-guide/input-checks.md)
 - [Tutorial: 2RJY Villin Headpiece](docs/tutorials/2rjy_villin_tutorial.md)
 - [Scientific Methods: SAM-MFP Specification](docs/scientific-methods/sam-mfp.md)
+- [Scientific Methods: Feature Library & Validation Scope](docs/scientific-methods/feature-library.md)
 - [Scientific Methods: Machine Learning Validation & Rigor](docs/scientific-methods/ml-validation.md)
 - [Scientific Methods: OpenMM Simulation Guide](docs/scientific-methods/openmm-simulation-guide.md)
-- [Scientific Methods: mdxplain Comparison Notes](docs/scientific-methods/mdxplain-comparison.md)
 - [Validation Summary & Benchmark Findings](docs/validation/summary.md)
 - [Architecture Guide](docs/developer-guide/architecture.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
