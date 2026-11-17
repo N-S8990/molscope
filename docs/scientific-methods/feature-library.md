@@ -9,6 +9,7 @@ before treating a family as validated for a new system.
 | Family | Current implemented features | Key limits |
 | --- | --- | --- |
 | Structural | geometric radius of gyration, asphericity, aligned RMSD, global RMSF | scope and reference dependent |
+| Protein conformation | declared Cα pair distances/contacts, selected side-chain χ1/χ2 circular sin/cos coordinates, aggregate DSSP helix/sheet/coil fractions | explicit atom and residue selection; side-chain torsions need complete named atoms but not a bond graph; Cα geometry and DSSP are not mechanisms |
 | Geometric | component center/minimum distances, contact count/fraction | PBC only when explicitly enabled and validated |
 | Interactions | generic contacts, protein-ligand residue contacts, salt-bridge geometry, hydrophobic packing, directional H-bonds, PHE/TYR aromatic stacking | cutoff/policy based; not energies or causal evidence |
 | Solvation/electrostatics | SASA, water-shell occupancy, neutral-scope molecular dipole | optional backend/partial charges required; not free energies; initial plugins are not PBC-aware |
