@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/N-S8990/molscope/schemas/project.schema.json",
+  "title": "MolScope Project Specification",
+  "description": "Schema definition for MolScope molecular dynamics analysis projects",
+  "type": "object",
+  "required": ["project_id", "systems"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1"],
+      "default": "1"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "systems": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["system_id", "topology", "ensembles"],
+        "properties": {
+          "system_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "topology": {
+            "type": "string",
+            "minLength": 1
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "ensembles": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["ensemble_id", "replicas"],
+              "properties": {
+                "ensemble_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "metadata": {
+                  "type": "object"
+                },
+                "replicas": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["replica_id", "trajectory"],
+                    "properties": {
+                      "replica_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "trajectory": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label_id", "label_type", "level", "source", "assignments"],
+        "properties": {
+          "label_id": {
+            "type": "string"
+          },
+          "label_type": {
+            "type": "string",
+            "enum": ["categorical", "numerical"]
+          },
+          "level": {
+            "type": "string",
+            "enum": ["trajectory"]
+          },
+          "source": {
+            "type": "string"
+          },
+          "assignments": {
+            "type": "object"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "prediction_tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "task_type"],
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "task_type": {
+            "type": "string"
+          },
+          "target_metadata_key": {
+            "type": ["string", "null"]
+          },
+          "target_label_id": {
+            "type": ["string", "null"]
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "generic_feature_parameters": {
+          "type": "object"
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "plugin_parameters": {
+          "type": "object"
+        },
+        "imaging": {
+          "type": "object",
+          "properties": {
+            "unwrap": { "type": "boolean" },
+            "center_selection": { "type": ["string", "null"] },
+            "center_to": { "type": "string" },
+            "wrap": { "type": "boolean" },
+            "fit_selection": { "type": ["string", "null"] },
+            "require_pbc": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}
