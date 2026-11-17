@@ -1,0 +1,55 @@
+{
+  "schema_version": "1",
+  "project_id": "2rjy_villin_benchmark",
+  "systems": [
+    {
+      "system_id": "villin_headpiece",
+      "topology": "/Users/nirav/Docs/mdxplain study/mdxplain/data/2RJY/protein.pdb",
+      "ensembles": [
+        {
+          "ensemble_id": "production_md",
+          "replicas": [
+            {
+              "replica_id": "run1",
+              "trajectory": "/Users/nirav/Docs/mdxplain study/mdxplain/data/2RJY/simulation_run1.xtc",
+              "metadata": {
+                "system": "HP35_villin",
+                "temperature_k": 300,
+                "length_ns": 1000
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "analysis": {
+    "generic_feature_parameters": {
+      "frame_stride": 5,
+      "max_frames": 2000
+    },
+    "imaging": {
+      "unwrap": true,
+      "center_selection": "protein",
+      "wrap": false
+    },
+    "plugins": [
+      "protein.ca_distances_contacts",
+      "protein.secondary_structure_dssp",
+      "protein.sidechain_torsions"
+    ],
+    "plugin_parameters": {
+      "protein.ca_distances_contacts": {
+        "selection": "protein and name CA",
+        "contact_cutoff_angstrom": 8.0,
+        "max_pairs": 3000
+      },
+      "protein.secondary_structure_dssp": {
+        "per_residue": false
+      },
+      "protein.sidechain_torsions": {
+        "residue_ids": [17, 20, 23, 27, 30, 35, 40, 50]
+      }
+    }
+  }
+}
