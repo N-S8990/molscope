@@ -638,3 +638,184 @@ def plot_landscape_interactive(
     fig.write_html(str(out_file), include_plotlyjs=True, full_html=True)
 
     return out_file
+
+
+def compute_pca_free_energy_landscape(
+    representation_coordinates: pd.DataFrame | np.ndarray,
+    pc_x: str = "PC1",
+    pc_y: str = "PC2",
+    temperature_k: float = 300.0,
+    bins: int | tuple[int, int] = 50,
+    units: str = "kcal/mol",
+    method: str = "histogram",
+    smooth: float | None = 1.0,
+    bandwidth: float | None = None,
+    min_density: float = 0.0,
+    max_energy_cutoff: float | None = None,
+) -> FreeEnergyLandscapeResult:
+    """Compute 2D potential of mean force free energy surface on leading PCA components.
+
+    Parameters
+    ----------
+    representation_coordinates : pd.DataFrame or np.ndarray
+        DataFrame or array containing projection coordinates along principal components.
+    pc_x : str, default="PC1"
+        Name or column label of the first principal component (horizontal axis).
+    pc_y : str, default="PC2"
+        Name or column label of the second principal component (vertical axis).
+    temperature_k : float, default=300.0
+        Simulation temperature in Kelvin.
+    bins : int or tuple[int, int], default=50
+        Number of grid bins along each dimension.
+    units : str, default="kcal/mol"
+        Thermodynamic energy units ("kcal/mol" or "kJ/mol").
+    method : str, default="histogram"
+        Density estimation method: "histogram" or "kde".
+    smooth : float | None, default=1.0
+        Gaussian smoothing kernel standard deviation (in bins).
+    bandwidth : float | None, default=None
+        Bandwidth factor for Gaussian KDE if method="kde".
+    min_density : float, default=0.0
+        Threshold below which probability density is considered unvisited.
+    max_energy_cutoff : float | None, default=None
+        Optional maximum free energy cutoff for basin detection.
+
+    Returns
+    -------
+    FreeEnergyLandscapeResult
+        Computed free energy surface with coordinates, Delta G grid, and detected basins.
+    """
+    if isinstance(representation_coordinates, pd.DataFrame):
+        df = representation_coordinates
+        # Resolve x coordinate
+        col_x = None
+        for cand in (pc_x, pc_x.upper(), pc_x.lower(), f"PC_{pc_x[-1]}" if pc_x[-1].isdigit() else pc_x):
+            if cand in df.columns:
+                col_x = cand
+                break
+        if col_x is None:
+            if df.shape[1] >= 1:
+                col_x = df.columns[0]
+            else:
+                raise KeyError(f"Coordinate column '{pc_x}' not found in DataFrame.")
+
+        # Resolve y coordinate
+        col_y = None
+        for cand in (pc_y, pc_y.upper(), pc_y.lower(), f"PC_{pc_y[-1]}" if pc_y[-1].isdigit() else pc_y):
+            if cand in df.columns:
+                col_y = cand
+                break
+        if col_y is None:
+            if df.shape[1] >= 2:
+                col_y = df.columns[1]
+            else:
+                raise KeyError(f"Coordinate column '{pc_y}' not found in DataFrame.")
+
+        x = df[col_x].to_numpy(dtype=float)
+        y = df[col_y].to_numpy(dtype=float)
+    else:
+        arr = np.asarray(representation_coordinates, dtype=float)
+        if arr.ndim != 2 or arr.shape[1] < 2:
+            raise ValueError(f"representation_coordinates array must have shape (N, >=2), got {arr.shape}.")
+        x = arr[:, 0]
+        y = arr[:, 1]
+
+    return compute_free_energy_landscape(
+        x=x,
+        y=y,
+        temperature_k=temperature_k,
+        bins=bins,
+        units=units,
+        method=method,
+        smooth=smooth,
+        bandwidth=bandwidth,
+        min_density=min_density,
+        max_energy_cutoff=max_energy_cutoff,
+    )
+
+
+def plot_pca_free_energy(
+    representation_coordinates: pd.DataFrame | np.ndarray,
+    output_dir: str | Path,
+    pc_x: str = "PC1",
+    pc_y: str = "PC2",
+    prefix: str = "pca_free_energy_landscape",
+    temperature_k: float = 300.0,
+    units: str = "kcal/mol",
+    title: str | None = None,
+    interactive: bool = True,
+    **kwargs: Any,
+) -> dict[str, Path]:
+    """Compute and plot 2D Free Energy Landscape on leading PCA coordinates.
+
+    Exports publication-quality static PNG and interactive Plotly HTML contour plots.
+
+    Parameters
+    ----------
+    representation_coordinates : pd.DataFrame or np.ndarray
+        Projection coordinates on PCA components.
+    output_dir : str or Path
+        Target directory where plot files will be saved.
+    pc_x : str, default="PC1"
+        Component for horizontal axis.
+    pc_y : str, default="PC2"
+        Component for vertical axis.
+    prefix : str, default="pca_free_energy_landscape"
+        File prefix for exported figures.
+    temperature_k : float, default=300.0
+        Simulation temperature in Kelvin.
+    units : str, default="kcal/mol"
+        Free energy units ("kcal/mol" or "kJ/mol").
+    title : str | None, default=None
+        Custom plot title. Defaults to "Free Energy Landscape ({pc_x} vs {pc_y})".
+    interactive : bool, default=True
+        Whether to generate interactive Plotly HTML file in addition to static PNG.
+    **kwargs : Any
+        Additional parameters passed to compute_free_energy_landscape or plotting methods.
+
+    Returns
+    -------
+    dict[str, Path]
+        Dictionary with keys 'static', 'interactive' (if generated), and 'basins_csv'.
+    """
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    result = compute_pca_free_energy_landscape(
+        representation_coordinates=representation_coordinates,
+        pc_x=pc_x,
+        pc_y=pc_y,
+        temperature_k=temperature_k,
+        units=units,
+        **{k: v for k, v in kwargs.items() if k in ("bins", "method", "smooth", "bandwidth", "min_density", "max_energy_cutoff")},
+    )
+
+    plot_title = title or f"Free Energy Landscape ({pc_x} vs {pc_y})"
+    static_path = out_dir / f"{prefix}.png"
+    result.plot_static(
+        output_path=static_path,
+        xlabel=pc_x,
+        ylabel=pc_y,
+        title=plot_title,
+        **{k: v for k, v in kwargs.items() if k in ("levels", "cmap", "max_energy", "show_basins", "show_contours", "dpi", "figsize")},
+    )
+
+    outputs: dict[str, Path] = {"static": static_path}
+
+    if interactive:
+        html_path = out_dir / f"{prefix}.html"
+        result.plot_interactive(
+            output_path=html_path,
+            xlabel=pc_x,
+            ylabel=pc_y,
+            title=plot_title,
+            **{k: v for k, v in kwargs.items() if k in ("colorscale", "max_energy", "show_basins", "n_contours")},
+        )
+        outputs["interactive"] = html_path
+
+    if not result.basins.empty:
+        basins_path = out_dir / f"{prefix}_basins.csv"
+        result.basins.to_csv(basins_path, index=False)
+        outputs["basins_csv"] = basins_path
+
+    return outputs
