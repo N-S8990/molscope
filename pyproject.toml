@@ -24,6 +24,7 @@ dev = [
   "pytest>=7",
   "pytest-cov",
   "coverage",
+  "flake8",
   "freesasa>=2.2,<3",
   "openmm>=8.1",
   "pdbfixer @ git+https://github.com/openmm/pdbfixer.git",
