@@ -7,7 +7,8 @@ longer active work assignments.
 
 The configured batch workflow implements validation/profiling, applicable
 extraction, quality diagnostics, target-free representation/state discovery,
-SAM-MFP prioritization, optional grouped predictive ML, and reports.
+SAM-MFP prioritization, grouped predictive ML when a unique declared target is
+available, and reports.
 
 The streaming workflow implements a limited feature subset with chunked storage,
 checked extraction resume, bounded-sample state discovery, and all-frame
