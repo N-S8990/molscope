@@ -236,3 +236,27 @@ class GenericFeatureExtractor:
             assessments=tuple(assessments),
             provenance=provenance,
         )
+
+
+def ring_normal(positions: np.ndarray) -> np.ndarray:
+    """Return a unit best-fit plane normal with no chemically meaningful sign."""
+    values = np.asarray(positions, dtype=float)
+    if values.ndim != 2 or values.shape[1] != 3 or len(values) < 3:
+        raise ValueError("ring positions must be an N×3 array with at least three atoms.")
+    _, singular_values, right = np.linalg.svd(values - values.mean(axis=0), full_matrices=False)
+    if singular_values[-2] <= np.finfo(float).eps:
+        raise ValueError("ring positions are collinear and do not define a plane.")
+    normal = right[-1]
+    return normal / np.linalg.norm(normal)
+
+
+def value(kind: str, left: np.ndarray, right: np.ndarray) -> float:
+    """Calculate one declared inter-group geometry in ångströms or unitless cosine."""
+    left_values, right_values = np.asarray(left, dtype=float), np.asarray(right, dtype=float)
+    if kind == "min":
+        return float(np.min(np.linalg.norm(left_values[:, None, :] - right_values[None, :, :], axis=-1)))
+    if kind == "centroid":
+        return float(np.linalg.norm(left_values.mean(axis=0) - right_values.mean(axis=0)))
+    if kind == "normal":
+        return float(abs(np.dot(ring_normal(left_values), ring_normal(right_values))))
+    raise ValueError(f"Unknown kind {kind}")
