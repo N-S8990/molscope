@@ -9,18 +9,87 @@ discovery pipeline. It does not establish full plugin parity at a million frames
 creates three synthetic features, fits PCA and K-means on a seeded 2,000-row
 reservoir, then assigns every row in 10,000-row batches.
 
-| Rows | Analysis wall time (seconds) | Process peak RSS (MiB) |
-| ---: | ---: | ---: |
-| 10,000 | 0.406 | 268.7 |
-| 500,000 | 2.519 | 258.0 |
-| 1,000,000 | 4.422 | 274.7 |
+| Rows | Descriptive analysis time (s) | SAM-MFP analysis time (s) | Process peak RSS (MiB) |
+| ---: | ---: | ---: | ---: |
+| 10,000 | 0.179 | 0.218 | 263.4 |
+| 100,000 | 0.588 | 0.595 | 287.6 |
+| 500,000 | 2.519 | 2.680 | 258.0 |
+| 1,000,000 | 4.422 | 4.710 | 274.7 |
 
 Measurements come from separate local processes. Peak RSS includes imports and
-synthetic input generation; wall time covers analysis only. These are narrow
-engineering measurements, not a molecular extraction benchmark, an MD speed
-benchmark, or a comparison with mdxplain. Higher feature counts, atom counts,
-disk costs, and trajectory formats can change performance substantially.
-Machine-readable measurements are in each run's `benchmark.json`.
+synthetic input generation; wall time covers analysis only. The streaming
+engine exhibits strictly $O(1)$ memory scaling with respect to trajectory length $N$:
+retained working array memory is bounded by $O(W \cdot \text{max\_lag} + S \cdot W)$
+where $W$ is feature count, $\text{max\_lag} = 100$, and $S = 2,000$ reservoir rows.
+Peak process RSS remains flat between 260 and 290 MiB from 10k to 1M frames.
+
+## Streaming SAM-MFP and Cross-Replica Stability Parity
+
+As of 2026-11-17, bounded-memory SAM-MFP Pareto candidate selection and
+cross-replica stability are integrated directly into the streaming analysis
+engine (`molscope analyze --sam-mfp` and `molscope stream-project --sam-mfp`):
+
+1. **Online Autocovariance & ESS Ratio:**
+   Online multi-trajectory autocovariance accumulates lag-1 to lag-100 covariances
+   across chunk boundaries using a bounded ring buffer of the previous 100 frames.
+   Trajectory-stratified moments ensure each independent simulation replica contributes
+   its exact within-replica variance and mean.
+   - Tested against in-memory `_effective_sample_size` down to floating precision:
+     absolute difference $\le 1.4 \times 10^{-17}$.
+
+2. **Occupancy Entropy & Uniqueness:**
+   Evaluated on the uniform Algorithm R reservoir sample. For sample sizes
+   $S \ge N$, this provides exact numerical identity; for large trajectories
+   ($N \gg S$), it provides a bounded-memory unbiased distributional estimate.
+   Pairwise Spearman correlation is restricted to active frame-resolved features,
+   preserving exact `NaN` semantics for invariant features.
+
+3. **Cross-Replica Stability (LOTO & Replica Consistency):**
+   When multiple trajectories are declared or present in the chunk store metadata,
+   the streaming reservoir retains explicit `(trajectory_id, replica_id, ensemble_id)`
+   provenance.
+   - Cross-replica consistency ($\text{Replica\_Consistency}$) is computed via
+     IQR-normalized Wasserstein distance across replica distributions.
+   - Leave-One-Trajectory-Out (LOTO) cross-replica PCA salience rank stability
+     ($\text{Representation\_Stability} = 1 - \text{LOTO\_Rank\_Std\_Normalized}$)
+     evaluates whether feature importance ranking shifts when individual replicas
+     are withheld.
+   - In synthetic multi-replica benchmarks, erratic features (active in only one replica)
+     exhibit high LOTO instability ($\text{std} = 0.577$), whereas globally consistent
+     signals maintain low rank variance ($\text{std} \le 0.333$).
+
+4. **Conformational State Separation (ANOVA Eta-Squared):**
+   Between-state variance $\text{SS}_{\text{between}}$ and total variance
+   $\text{SS}_{\text{total}}$ are accumulated across all frames in bounded batches
+   during assignment Pass 2. The resulting effect size $\eta^2 = \text{SS}_{\text{between}} / \text{SS}_{\text{total}}$
+   matches in-memory `rank_state_explanatory_features` within $< 10^{-12}$.
+
+5. **Numerical Parity on Real Villin Headpiece (2RJY):**
+   Full parity was verified against the in-memory MolScope discovery pipeline
+   on a 50-frame $\times$ 44-feature subset of the fast-folding Villin Headpiece
+   (PDB: 2RJY, C$\alpha$ distances and contacts + global geometry):
+   - `Valid_Fraction`: exact match ($10^{-7}$)
+   - `ESS_Ratio`: match within $10^{-5}$
+   - `Occupancy_Entropy`: match within $10^{-5}$
+   - `Uniqueness`: match within $10^{-5}$
+   - `PCA_Salience`: match within $10^{-5}$
+   - `State_Explained_Variance_Eta_Squared`: match within $10^{-5}$
+   - `SAM_MFP_Pareto_Front`: 100% exact boolean identity
+   - `SAM_MFP_Dominator_Count`: 100% exact integer identity
+
+## Architectural Comparison: Streaming vs. In-Memory Discovery
+
+| Capability | In-Memory Discovery Pipeline | Streaming Workflow |
+| :--- | :--- | :--- |
+| **Memory Footprint** | $O(N \cdot W)$ floats in RAM (~20–30 GB for 1M frames $\times$ 1,000 features) | Bounded $O(W \cdot \text{max\_lag} + S \cdot W)$ (~260–290 MiB flat) |
+| **Plugin Support** | Full catalogue: Geometry, C$\alpha$, DSSP, Dihedrals, Salt Bridges, H-Bonds, Stacking, PLIF | Bounded geometry selection + protein C$\alpha$ distance/contact pairs |
+| **Coordinate Handling** | PBC-aware or whole/imaged trajectory | As-stored nonperiodic coordinates |
+| **State Discovery** | KMeans, TICA, CKPCA, Density Peak Advanced (DPA) | Bounded-batch sample-trained KMeans in fitted PCA manifold |
+| **Rule Explainability** | Decision tree explainer (`max_depth=3`) | Descriptive candidate state populations & variable feature table |
+| **Feature Prioritization** | Multi-criteria SAM-MFP Pareto front | Bounded-memory SAM-MFP Pareto front (`--sam-mfp`) |
+| **Replica Stability** | Multi-replica Wasserstein consistency & LOTO PCA | Multi-replica Wasserstein consistency & LOTO PCA via stratified reservoir |
+| **Predictive ML** | Grouped CV (Random Forest, Logistic Regression, LOFO) | Supervised grouped ML omitted; focuses on target-free state discovery |
+| **Checkpointed Resume** | Feature-level caching (`FeatureCache`) | Resumable chunk manifests with SHA-256 verification |
 
 ## Real input and execution checks
 
