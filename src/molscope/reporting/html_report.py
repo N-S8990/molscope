@@ -1,7 +1,8 @@
 """Generate a consolidated, single-page interactive HTML report dashboard.
 
 Replaces the overwhelming 50+ loose files with an elegant, tabbed interactive
-dashboard for inspecting MD analysis results.
+dashboard for inspecting MD analysis results, free energy landscapes, cluster
+timelines, state transitions, decision tree explainability, and 3D molecular structures.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
+
+from molscope.visualization.rules import render_decision_tree_html
 
 
 def _clean_val(val: Any) -> str:
@@ -79,9 +82,52 @@ def generate_html_report(
     pred_ranking = outputs.get("supervised_predictive_feature_ranking")
     pred_ranking_html = _df_to_html_table(pred_ranking) if isinstance(pred_ranking, pd.DataFrame) else "<p>No predictive ranking (unsupervised run).</p>"
 
-    # Check for images in figures/
-    fig_cards = []
+    # Check for decision tree rules
+    dt_rules = outputs.get("decision_tree_rules")
+    if dt_rules is None:
+        for cand_path in (dest_path / "decision_tree_rules.csv", dest_path / "tables/decision_tree_rules.csv"):
+            if cand_path.is_file():
+                try:
+                    dt_rules = pd.read_csv(cand_path)
+                    break
+                except Exception:
+                    pass
+    dt_rules_html = render_decision_tree_html(dt_rules) if dt_rules is not None else "<p style='color: var(--text-secondary);'>No decision tree rules extracted.</p>"
+
+    # Check for specific diagnostic plots
     fig_dir = dest_path / "figures"
+    timeline_img = None
+    transitions_img = None
+    fes_img = None
+
+    for fpath in (fig_dir / "cluster_timeline.png", dest_path / "cluster_timeline.png"):
+        if fpath.is_file():
+            timeline_img = f"figures/{fpath.name}" if fpath.parent.name == "figures" else fpath.name
+            break
+
+    for fpath in (fig_dir / "state_transitions.png", dest_path / "state_transitions.png"):
+        if fpath.is_file():
+            transitions_img = f"figures/{fpath.name}" if fpath.parent.name == "figures" else fpath.name
+            break
+
+    for fpath in (fig_dir / "pca_free_energy_landscape.png", dest_path / "pca_free_energy_landscape.png"):
+        if fpath.is_file():
+            fes_img = f"figures/{fpath.name}" if fpath.parent.name == "figures" else fpath.name
+            break
+
+    # Top residue scores for 3D view
+    residue_scores_df = None
+    for cand_p in (dest_path / "3d_visualization/molscope_3d_residue_scores.csv", dest_path / "molscope_3d_residue_scores.csv"):
+        if cand_p.is_file():
+            try:
+                residue_scores_df = pd.read_csv(cand_p)
+                break
+            except Exception:
+                pass
+    res_scores_html = _df_to_html_table(residue_scores_df.head(10)) if isinstance(residue_scores_df, pd.DataFrame) else ""
+
+    # Check for all images in figures/
+    fig_cards = []
     if fig_dir.is_dir():
         for fig_path in sorted(fig_dir.glob("*.png")):
             name_clean = fig_path.stem.replace("_", " ").title()
@@ -94,6 +140,49 @@ def generate_html_report(
             </div>
             """)
     figures_grid = "".join(fig_cards) if fig_cards else "<p>No figures rendered.</p>"
+
+    # Build States tab extra visuals
+    timeline_card = ""
+    if timeline_img:
+        timeline_card = f"""
+        <div class="card">
+            <h3>Cluster Membership Timeline</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">
+                Sequential cluster and macrostate transitions across continuous simulation trajectories.
+            </p>
+            <a href="{timeline_img}" target="_blank">
+                <img src="{timeline_img}" alt="Cluster Timeline" loading="lazy"/>
+            </a>
+        </div>
+        """
+
+    transitions_card = ""
+    if transitions_img:
+        transitions_card = f"""
+        <div class="card">
+            <h3>Empirical State Transition Matrix</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">
+                Markovian jump probabilities P(S_(t+1) = j | S_t = i) between candidate conformational states.
+            </p>
+            <a href="{transitions_img}" target="_blank">
+                <img src="{transitions_img}" alt="State Transitions" loading="lazy" style="max-width: 550px;"/>
+            </a>
+        </div>
+        """
+
+    fes_card = ""
+    if fes_img:
+        fes_card = f"""
+        <div class="card">
+            <h3>Leading PCA Free Energy Landscape (FES)</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">
+                2D empirical Potential of Mean Force (PMF) ΔG(PC1, PC2) with identified conformational basins (B1, B2, ...).
+            </p>
+            <a href="{fes_img}" target="_blank">
+                <img src="{fes_img}" alt="PCA Free Energy Landscape" loading="lazy" style="max-width: 650px;"/>
+            </a>
+        </div>
+        """
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -242,6 +331,77 @@ def generate_html_report(
             font-size: 13px;
             margin-top: 8px;
         }}
+
+        /* Decision Tree Rule Cards */
+        .dt-rules-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 16px;
+            margin-top: 12px;
+        }}
+        .dt-rule-card {{
+            background: #131d2e;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }}
+        .dt-rule-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }}
+        .dt-cluster-badge {{
+            background: #0284c7;
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }}
+        .dt-rule-num {{ font-size: 12px; color: var(--text-secondary); font-weight: 600; }}
+        .dt-rule-body {{ margin-bottom: 14px; }}
+        .dt-if-tag {{ font-size: 11px; font-weight: 800; color: var(--accent-orange); margin-bottom: 4px; }}
+        .dt-clauses {{ margin-left: 8px; margin-bottom: 8px; }}
+        .dt-rule-clause {{ margin-bottom: 4px; }}
+        .dt-then-tag {{ font-size: 12px; color: var(--text-primary); }}
+        .dt-rule-metrics {{
+            display: flex;
+            gap: 16px;
+            border-top: 1px solid var(--border);
+            padding-top: 10px;
+            font-size: 11px;
+        }}
+        .dt-metric {{ flex: 1; }}
+        .dt-metric-label {{ color: var(--text-secondary); display: block; }}
+        .dt-metric-val {{ font-weight: 700; color: var(--text-primary); }}
+        .dt-bar {{
+            background: #0f172a;
+            height: 4px;
+            border-radius: 2px;
+            margin-top: 3px;
+            overflow: hidden;
+        }}
+        .dt-fill.prec {{ background: var(--accent-primary); }}
+        .dt-fill.rec {{ background: var(--accent-green); }}
+
+        /* Sidecar link button */
+        .sidecar-btn {{
+            display: inline-block;
+            background: #0284c7;
+            color: white;
+            text-decoration: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            margin-top: 8px;
+            margin-bottom: 12px;
+        }}
+        .sidecar-btn:hover {{ background: #0369a1; }}
     </style>
 </head>
 <body>
@@ -252,7 +412,7 @@ def generate_html_report(
             <span class="badge">Run Complete</span>
         </div>
         <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">
-            Clean consolidated view of biophysical feature prioritization, states, and predictive models.
+            Clean consolidated view of biophysical feature prioritization, conformational states, interpretability rules, and 3D molecular structures.
         </p>
     </header>
 
@@ -284,7 +444,7 @@ def generate_html_report(
         <button class="tab-btn" onclick="switchTab('tab-states')">🧬 Conformational States</button>
         <button class="tab-btn" onclick="switchTab('tab-predictive')">📈 Predictive Importance</button>
         <button class="tab-btn" onclick="switchTab('tab-figures')">🖼️ Diagnostic Figures</button>
-        <button class="tab-btn" onclick="switchTab('tab-3d')">🧊 3D PyMOL / ChimeraX</button>
+        <button class="tab-btn" onclick="switchTab('tab-3d')">🧊 3D PyMOL / Sidecar</button>
         <button class="tab-btn" onclick="switchTab('tab-files')">📁 Files & Exports</button>
     </div>
 
@@ -305,6 +465,18 @@ def generate_html_report(
 
     <!-- TAB 2: STATES -->
     <div id="tab-states" class="tab-content">
+        <div class="card">
+            <h3>Interpretable Decision Tree Rules (If-Then Logic)</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">
+                Sparse, human-interpretable boolean rules explaining what distinguishes each conformational state or cluster.
+            </p>
+            {dt_rules_html}
+        </div>
+
+        {timeline_card}
+        {transitions_card}
+        {fes_card}
+
         <div class="card">
             <h3>Conformational State Populations per Trajectory</h3>
             <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">
@@ -335,19 +507,35 @@ def generate_html_report(
     <!-- TAB 5: 3D VIEW -->
     <div id="tab-3d" class="tab-content">
         <div class="card">
-            <h3>Interactive 3D Structure Visualizations</h3>
+            <h3>Interactive 3D Structure Visualizations & B-Factor Mapping</h3>
             <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
-                MolScope has generated publication-ready 3D structure scripts in <code>3d_visualization/</code>:
+                MolScope maps per-residue importance directly into the Beta-factor column of the reference PDB structure.
             </p>
             
-            <h4 style="color: var(--text-primary); margin-top: 12px;">1. Open in PyMOL</h4>
-            <pre>pymol 3d_visualization/molscope_3d.pml</pre>
-            <p style="color: var(--text-secondary); font-size: 12px; margin-top: 4px;">
-                Loads the structure with cartoon putty, spectrum coloring by feature importance (blue=low, red=high), and labels the top discriminative residues.
+            <h4 style="color: var(--text-primary); margin-top: 12px;">1. Antigravity Biomolecular Structure Viewer (Sidecar)</h4>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">
+                Open the interactive Mol* 3D viewer sidecar to inspect residue importance directly in Antigravity:
+            </p>
+            <a href="sidecar://science/biomolecular_structure_viewer/ui.html" class="sidecar-btn">
+                🔬 Open in Biomolecular Structure Viewer
+            </a>
+            <p style="color: var(--text-secondary); font-size: 12px;">
+                Load <code>3d_visualization/molscope_3d.pdb</code> and select coloring by <i>B-factor / Temperature Factor</i>.
             </p>
 
-            <h4 style="color: var(--text-primary); margin-top: 16px;">2. Open in UCSF ChimeraX</h4>
+            <h4 style="color: var(--text-primary); margin-top: 18px;">2. Open in PyMOL</h4>
+            <pre>pymol 3d_visualization/molscope_3d.pml</pre>
+            <p style="color: var(--text-secondary); font-size: 12px; margin-top: 4px;">
+                Loads the structure with cartoon putty, spectrum coloring by feature importance (blue=low, red=high), and labels top discriminative residues.
+            </p>
+
+            <h4 style="color: var(--text-primary); margin-top: 18px;">3. Open in UCSF ChimeraX</h4>
             <pre>chimerax 3d_visualization/molscope_3d.cxc</pre>
+
+            <div style="margin-top: 20px;">
+                <h4 style="color: var(--text-primary); margin-bottom: 8px;">Top Scored Discriminative Residues</h4>
+                {res_scores_html}
+            </div>
         </div>
     </div>
 
@@ -356,7 +544,7 @@ def generate_html_report(
         <div class="card">
             <h3>Organized Output Directory Structure</h3>
             <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
-                All 50+ raw calculation outputs are filed into clean, dedicated subdirectories:
+                All calculation outputs are filed into clean, dedicated subdirectories:
             </p>
             <pre>
 run_output/
@@ -364,13 +552,17 @@ run_output/
 ├── summary.md                   <-- Executive summary report
 │
 ├── 3d_visualization/           <-- PyMOL & ChimeraX 3D scripts + scored PDB
-│   ├── molscope_3d.pdb
-│   ├── molscope_3d.pml
-│   └── molscope_3d.cxc
+│   ├── molscope_3d.pdb          <-- PDB with B-factor importance mapping
+│   ├── molscope_3d.pml          <-- One-click PyMOL cartoon putty script
+│   ├── molscope_3d.cxc          <-- UCSF ChimeraX visualization script
+│   └── molscope_3d_residue_scores.csv
 │
 ├── figures/                     <-- Publication-quality PNG plots
+│   ├── pca_free_energy_landscape.png
+│   ├── cluster_timeline.png
+│   ├── state_transitions.png
+│   ├── decision_tree_rules.png
 │   ├── sam_mfp_tradeoff.png
-│   ├── state_populations.png
 │   └── predictive_feature_ranking.png
 │
 ├── tables/                      <-- All raw CSV data tables
