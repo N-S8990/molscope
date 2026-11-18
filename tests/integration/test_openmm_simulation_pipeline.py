@@ -152,11 +152,19 @@ class OpenMMSimulationPipelineIntegrationTests(unittest.TestCase):
 
         # Set up an interrupted run state at step 30 (out of 70 total equilibration+production steps)
         from molscope.simulation.openmm import _runtime_dependencies, _prepare, _digest, _write_execution_provenance
-        from datetime import UTC, datetime
+        from datetime import datetime, timezone
         from dataclasses import asdict
         from molscope.core.project import _openmm_protocol
 
-        mm, app, unit, PDBFixer = _runtime_dependencies()
+        try:
+            from datetime import UTC  # type: ignore[attr-defined]
+        except ImportError:
+            UTC = timezone.utc  # type: ignore[misc]
+
+        try:
+            mm, app, unit, PDBFixer = _runtime_dependencies()
+        except RuntimeError as exc:
+            self.skipTest(f"OpenMM and pdbfixer runtime not available: {exc}")
         prepared_pdb = Path(job["prepared_topology"])
         prepared_pdb.parent.mkdir(parents=True, exist_ok=True)
         topology, positions = _prepare(str(job["input_structure"]), str(prepared_pdb), job["protocol"], mm, app, unit, PDBFixer)
