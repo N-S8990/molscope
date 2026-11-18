@@ -294,6 +294,15 @@ MolScope enforces strict methodological rigor, but researchers should be aware o
 
 ---
 
+## AI Assistance
+
+This project was developed with AI assistance:
+- **Coding and running of code:** Antigravity (model: Gemini 3.8 Flash), and Codex (models: GPT Terra 6.1, GPT Sol 6.2, GPT 6 Astra).
+- **Claude (Anthropic):** Used for structure review.
+- The project author is responsible for the code, design decisions, and scientific claims. All AI-generated code was reviewed and tested by the author.
+
+---
+
 ## License
 
 MolScope is released under the [MIT License](LICENSE).
