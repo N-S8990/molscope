@@ -1,4 +1,0 @@
-top_k,jaccard_similarity,molscope_pairs_count,mdxplain_pairs_count,intersection_count,intersecting_residue_pairs
-5,0.0,5,5,0,[]
-10,0.0,10,10,0,[]
-20,0.0294,15,20,1,['24-28']
