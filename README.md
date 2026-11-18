@@ -162,6 +162,24 @@ molscope run --project project.json --out-dir results/cohort_run
 
 ---
 
+## Interactive Jupyter Notebooks
+
+MolScope provides a dedicated suite of hands-on Jupyter tutorial notebooks in [`notebooks/`](notebooks/):
+
+| Notebook | Focus Area | Description |
+| :--- | :--- | :--- |
+| **[`01_Quickstart_Villin_Headpiece.ipynb`](notebooks/01_Quickstart_Villin_Headpiece.ipynb)** | **End-to-End Workflow** | Interactive tour using the `Study` API on HP35 Villin Headpiece (2RJY): multi-family featurization, TICA, CKPCA, DPA state discovery, 2D Free Energy Landscapes ($\Delta G$ in kcal/mol), Boolean decision tree rules, and 3D PyMOL export. |
+| **[`02_Simulation_to_Discovery_Pipeline.ipynb`](notebooks/02_Simulation_to_Discovery_Pipeline.ipynb)** | **Automated OpenMM Continuum** | 3-stage simulation pipeline (`molscope run-pdb`): raw PDB preparation at pH 7.4, Amber14-SB + GBN2 implicit solvent, dry-run frame/byte estimates, checkpoint recovery, and seamless handoff into ML discovery. |
+| **[`03_Statistical_ML_and_SAM_MFP_Rigor.ipynb`](notebooks/03_Statistical_ML_and_SAM_MFP_Rigor.ipynb)** | **Statistical ML & Rigor** | Overcoming the "Variance Fallacy", multi-objective Pareto optimization (representation salience vs. ESS ratio vs. uniqueness), purged block cross-validation with temporal embargo buffers, and Leave-One-Feature-Out (LOFO) predictive ranking. |
+| **[`04_Multi_Family_Biophysical_Featurization.ipynb`](notebooks/04_Multi_Family_Biophysical_Featurization.ipynb)** | **12+ Feature Families** | Deep dive beyond pairwise contacts: Cα distance graphs, DSSP helix/sheet/coil fractions, circular dihedrals ($\phi, \psi, \chi_1$), FreeSASA solvent exposure, salt-bridge geometry, and aromatic $\pi$-stacking. |
+
+Launch the tutorials locally:
+```bash
+jupyter lab notebooks/
+```
+
+---
+
 ## Result Checks & Interpretation Guide
 
 Every MolScope run generates a structured results directory. Use this guide to verify and interpret your outputs:
@@ -260,6 +278,7 @@ MolScope enforces strict methodological rigor, but researchers should be aware o
 
 ## Documentation
 
+- [Interactive Jupyter Notebooks Suite](notebooks/README.md)
 - [User Guide: Project Runs](docs/user-guide/project-runs.md)
 - [User Guide: CLI Reference](docs/user-guide/cli.md)
 - [User Guide: Study Workspaces](docs/user-guide/workspaces.md)
