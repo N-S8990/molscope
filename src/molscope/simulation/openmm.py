@@ -14,9 +14,14 @@ import hashlib
 import shutil
 import uuid
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    from datetime import UTC  # type: ignore[attr-defined]
+except ImportError:
+    UTC = timezone.utc  # type: ignore[misc]
 
 from molscope.core.project import ProjectSpec, load_project_spec, _openmm_protocol
 
