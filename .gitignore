@@ -23,3 +23,24 @@ studies/validation_1a22/*
 !studies/validation_1a22/topology_identity_check.json
 examples/local_*.json
 .DS_Store
+*.DS_Store
+
+# AI tool configurations and prompt caches
+.cursorrules
+.codex/
+.agent/
+.antigravity/
+.claude/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+copilot-instructions.md
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Coverage and testing outputs
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
