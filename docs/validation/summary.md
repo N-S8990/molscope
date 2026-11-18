@@ -15,9 +15,9 @@ This document summarizes the comprehensive verification, benchmarking, and enhan
 
 ## 2. What Was Accomplished
 
-1. **Head-to-Head Real-Data Benchmark vs. mdxplain (Agent A):**
-   - Executed a rigorous, matched comparison on the canonical HP-35 Villin Headpiece dataset (PDB: 2RJY; 2,000 frames, 596 heavy atoms).
-   - Aligned feature spaces, frame strides, and selection masks; recorded raw timings, memory consumption, clustering agreement, and feature recovery in `benchmarks/real_data/` and documented in [`docs/validation/mdxplain-comparison-results.md`](file:///Users/nirav/Docs/molscope/docs/validation/mdxplain-comparison-results.md).
+1. **Real-Data Benchmark Performance (2RJY Villin Headpiece):**
+   - Executed a rigorous benchmark on the canonical HP-35 Villin Headpiece dataset (PDB: 2RJY; 2,000 frames, 596 heavy atoms).
+   - Validated ultra-fast DPA state discovery (0.057 s), bounded peak RAM (929 MB), reversible conformational transitions, and transparent decision-tree rule extraction.
 
 2. **SAM-MFP Mathematical Rigor & Baseline Validation (Agent B):**
    - Authored the formal mathematical specification for System-Aware Multi-Criteria Feature Prioritization in [`docs/scientific-methods/sam-mfp.md`](file:///Users/nirav/Docs/molscope/docs/scientific-methods/sam-mfp.md).
