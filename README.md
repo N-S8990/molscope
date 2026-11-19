@@ -287,7 +287,7 @@ MolScope enforces strict methodological rigor, but researchers should be aware o
 - [User Guide: CLI Reference](docs/user-guide/cli.md)
 - [User Guide: Study Workspaces](docs/user-guide/workspaces.md)
 - [User Guide: Input Validation & PBC Checks](docs/user-guide/input-checks.md)
-- [Tutorial: 2RJY Villin Headpiece](docs/tutorials/2rjy_villin_tutorial.md)
+- [Tutorial: 2RJY Villin Headpiece](docs/tutorials/2rjy_villin_tutorial.ipynb)
 - [Scientific Methods: SAM-MFP Specification](docs/scientific-methods/sam-mfp.md)
 - [Scientific Methods: Feature Library & Validation Scope](docs/scientific-methods/feature-library.md)
 - [Scientific Methods: Machine Learning Validation & Rigor](docs/scientific-methods/ml-validation.md)
