@@ -48,7 +48,10 @@ from molscope.analysis.discovery.decision_tree import DecisionTreeExplainer
 from molscope.reporting.html_report import generate_html_report
 
 
-DEFAULT_REFERENCE_PDB = Path("/Users/nirav/Docs/mdxplain study/mdxplain/data/2RJY/protein.pdb")
+DEFAULT_REFERENCE_PDB = (
+    Path("data/2RJY/protein.pdb") if Path("data/2RJY/protein.pdb").exists()
+    else Path("tests/fixtures/1A22.pdb")
+)
 DEFAULT_PRECOMPUTED_DIR = Path("/Users/nirav/Docs/molscope-results/runs/2rjy_benchmark")
 DEFAULT_OUTPUT_DIR = Path("/Users/nirav/Docs/molscope-results/runs/2rjy_interpretability")
 

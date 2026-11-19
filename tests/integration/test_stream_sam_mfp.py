@@ -288,8 +288,8 @@ def test_streaming_parity_with_in_memory_workflow(tmp_path):
 
 def test_2rjy_subset_streaming_vs_in_memory_parity(tmp_path):
     """Task 4 verification on real 2RJY Villin Headpiece subset."""
-    pdb_path = Path("/Users/nirav/Docs/mdxplain study/mdxplain/data/2RJY/protein.pdb")
-    xtc_path = Path("/Users/nirav/Docs/mdxplain study/mdxplain/data/2RJY/simulation_run1.xtc")
+    pdb_path = Path("data/2RJY/protein.pdb")
+    xtc_path = Path("data/2RJY/simulation_run1.xtc")
 
     if not (pdb_path.is_file() and xtc_path.is_file()):
         pytest.skip("2RJY benchmark inputs not available locally")
