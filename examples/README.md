@@ -1,5 +1,6 @@
-# Project templates
+# Project templates and examples
 
+- `visualize_2rjy_interpretability.ipynb`: Interactive Jupyter walkthrough of MolScope's interpretability and 3D visualization suite (2D FES landscapes, cluster timelines, Markov transition matrices, Boolean decision tree rules, and PyMOL/ChimeraX exports).
 - `generic_project.example.json`: full project schema including optional labels
   and simulation configuration. Replace placeholder inputs and force fields.
 - `study/project.json`: minimal portable study declaration.

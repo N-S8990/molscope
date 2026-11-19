@@ -42,7 +42,7 @@ This document summarizes the comprehensive verification, benchmarking, and enhan
    - Added cluster membership timeline tracking and empirical Markovian transition probability matrices (`src/molscope/visualization/timeline.py`).
    - Implemented graphical Decision Tree if-then rule card visualizations (`src/molscope/visualization/rules.py`).
    - Implemented PDB Beta-factor importance mapping (`src/molscope/visualization/pdb_mapping.py`) and automated PyMOL (`.pml`) and ChimeraX (`.cxc`) cartoon putty visualizers.
-   - Provided a complete worked example in [`examples/visualize_2rjy_interpretability.py`](file:///Users/nirav/Docs/molscope/examples/visualize_2rjy_interpretability.py).
+   - Provided a complete worked example in [`examples/visualize_2rjy_interpretability.ipynb`](file:///Users/nirav/Docs/molscope/examples/visualize_2rjy_interpretability.ipynb).
 
 6. **Physical Correctness & Input Verification (Agent F):**
    - Implemented explicit Periodic Boundary Condition (PBC) checks in `src/molscope/io/validation.py`, detecting wrapped coordinates and broken covalent bonds across unit cell faces.
