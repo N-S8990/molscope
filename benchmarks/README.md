@@ -1,8 +1,9 @@
 # Reproducible benchmarks
 
-`configs/matched.example.json` declares a matched-input comparison. Copy it into
-a study workspace and supply actual manifests, tool locations, protocols, and
-measured metrics before running:
+- `run_2rjy_matched_benchmark.ipynb`: Interactive Jupyter benchmark executing the 2RJY Villin Headpiece continuum with live runtime breakdowns, memory tracking, and cluster diagnostics.
+- `configs/matched.example.json`: declares a matched-input comparison. Copy it into
+  a study workspace and supply actual manifests, tool locations, protocols, and
+  measured metrics before running:
 
 ```bash
 python -m molscope benchmark --benchmark /path/to/study/benchmark.json --out-dir /path/to/study/runs/benchmark-001
