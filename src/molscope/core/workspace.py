@@ -58,8 +58,10 @@ def begin_run(study, run_id):
     write_json(root / 'resolved_project.json', asdict(project))
     inputs = sorted({str(item.topology) for item in project.trajectory_inputs()} |
                     {str(item.trajectory) for item in project.trajectory_inputs()})
+    now_utc = datetime.now(timezone.utc).isoformat()
     provenance = {'project_id': project.project_id, 'run_id': run_id, 'status': 'running',
-                  'started_at': datetime.now(timezone.utc).isoformat(),
+                  'started_at': now_utc,
+                  'created_at_utc': now_utc,
                   'python': platform.python_version(),
                   'inputs': [file_fingerprint(path) for path in inputs]}
     write_json(root / 'provenance.json', provenance)
