@@ -43,6 +43,9 @@ copilot-instructions.md
 # Jupyter checkpoints
 .ipynb_checkpoints/
 
+# Local changelog
+CHANGELOG.md
+
 # Data directories and large trajectories
 data/
 *.xtc
