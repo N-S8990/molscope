@@ -4,14 +4,14 @@
   "systems": [
     {
       "system_id": "villin_headpiece",
-      "topology": "/Users/nirav/Docs/mdxplain study/mdxplain/data/2RJY/protein.pdb",
+      "topology": "data/2RJY/protein.pdb",
       "ensembles": [
         {
           "ensemble_id": "production_md",
           "replicas": [
             {
               "replica_id": "run1",
-              "trajectory": "/Users/nirav/Docs/mdxplain study/mdxplain/data/2RJY/simulation_run1.xtc",
+              "trajectory": "data/2RJY/simulation_run1.xtc",
               "metadata": {
                 "system": "HP35_villin",
                 "temperature_k": 300,
