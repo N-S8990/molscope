@@ -4,7 +4,7 @@ This directory contains the benchmarking harness, raw validation datasets, and c
 
 ## Contents
 
-- `run_benchmarks.py`: Standalone executable benchmark runner. Evaluates:
+- `run_benchmarks.ipynb`: Interactive Jupyter benchmark suite and comparative analysis. Evaluates:
   1. Synthetic planted-signal benchmark with known ground-truth features and collinear duplicates.
   2. Real-world 2RJY Villin Headpiece (HP-35) benchmark comparing SAM-MFP against empirical variance, mutual information, decision-tree Gini importance, and random ranking.
   3. Systematic objective ablation studies (ablating Uniqueness, ESS Ratio, Occupancy Entropy, PCA Salience).
@@ -19,9 +19,9 @@ This directory contains the benchmarking harness, raw validation datasets, and c
 
 ## How to Run
 
-Execute the benchmark suite using the project environment:
+Execute the interactive benchmark suite using Jupyter:
 ```bash
-/Users/nirav/ds-env/bin/python benchmarks/sam_mfp/run_benchmarks.py
+/Users/nirav/ds-env/bin/jupyter nbconvert --to notebook --execute benchmarks/sam_mfp/run_benchmarks.ipynb --inplace
 ```
 
 ## Key Findings
