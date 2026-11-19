@@ -148,7 +148,7 @@ Users must not cite cross-replica validation when only a single simulation run w
 
 ## 6. Empirical Validation and Baseline Benchmarks
 
-The benchmark suite in `benchmarks/sam_mfp/run_benchmarks.py` validates SAM-MFP across both synthetic planted-signal datasets and the 10,001-frame Villin Headpiece (2RJY) benchmark.
+The benchmark suite in `benchmarks/sam_mfp/run_benchmarks.ipynb` validates SAM-MFP across both synthetic planted-signal datasets and the 10,001-frame Villin Headpiece (2RJY) benchmark.
 
 ### 6.1 Synthetic Planted-Signal Benchmark
 To test ground-truth recovery, a 20-feature dataset was generated with 3 planted signal features having complementary multi-objective profiles and 17 strictly inferior noise features ($N=600$ frames, $T=3$ replicas):
