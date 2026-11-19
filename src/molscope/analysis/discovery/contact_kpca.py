@@ -425,10 +425,15 @@ def fit_contact_kpca(
         coords_df = manifest.reset_index(drop=True).copy()
         for idx, col in enumerate(coord_cols):
             coords_df[col] = embeddings[:, idx]
+            coords_df[f"CKPCA{idx + 1}"] = embeddings[:, idx]
     elif isinstance(features, pd.DataFrame):
         coords_df = pd.DataFrame(embeddings, columns=coord_cols, index=features.index)
+        for idx in range(k):
+            coords_df[f"CKPCA{idx + 1}"] = embeddings[:, idx]
     else:
         coords_df = pd.DataFrame(embeddings, columns=coord_cols)
+        for idx in range(k):
+            coords_df[f"CKPCA{idx + 1}"] = embeddings[:, idx]
 
     # Compute feature salience
     salience_df = _compute_feature_salience(x, embeddings, explained_variance_ratio, feature_names)

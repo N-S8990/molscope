@@ -277,6 +277,7 @@ def fit_tica(
     coord_table = meta.copy()
     for i in range(k):
         coord_table[f"TIC_{i + 1}"] = projected[:, i]
+        coord_table[f"TIC{i + 1}"] = projected[:, i]
 
     # 10. Feature loadings and kinetic salience
     pos_evals = np.maximum(retained_evals, 0.0)
@@ -295,6 +296,7 @@ def fit_tica(
     }
     for i in range(k):
         loadings_dict[f"TIC_{i + 1}"] = retained_evecs[:, i]
+        loadings_dict[f"TIC{i + 1}"] = retained_evecs[:, i]
 
     loadings_table = (
         pd.DataFrame(loadings_dict)
