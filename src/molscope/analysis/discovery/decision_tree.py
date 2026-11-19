@@ -120,6 +120,76 @@ class DecisionRule:
         mask = self.matches(X)
         return X.loc[mask].copy()
 
+    @property
+    def cluster_id(self) -> Any:
+        if isinstance(self.cluster, str) and self.cluster.startswith("cluster_"):
+            try:
+                return int(self.cluster.split("_")[1])
+            except ValueError:
+                pass
+        return self.cluster
+
+    @property
+    def cluster_name(self) -> str:
+        return f"Macrostate {self.cluster_id}"
+
+    @property
+    def purity(self) -> float:
+        return self.precision
+
+    @property
+    def support_fraction(self) -> float:
+        return float(self.support / self.total_samples) if self.total_samples > 0 else 0.0
+
+    def simplified_rule_text(self) -> str:
+        if self.conditions:
+            return " AND ".join(self.conditions)
+        return self.rule_string
+
+
+class RuleStore(list):
+    """Container holding DecisionRule objects with dual list and dict-by-cluster access."""
+
+    def __init__(self, rules_by_cluster: dict[Any, list[DecisionRule]] | None = None):
+        rules_by_cluster = rules_by_cluster or {}
+        all_rules: list[DecisionRule] = []
+        for rules_list in rules_by_cluster.values():
+            all_rules.extend(rules_list)
+        super().__init__(all_rules)
+        self._by_cluster: dict[Any, list[DecisionRule]] = dict(rules_by_cluster)
+
+    def __contains__(self, key: Any) -> bool:
+        return key in self._by_cluster or super().__contains__(key)
+
+    def __getitem__(self, key: Any) -> Any:
+        if key in self._by_cluster:
+            return self._by_cluster[key]
+        if isinstance(key, (int, slice)):
+            return super().__getitem__(key)
+        return self._by_cluster.get(key, [])
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        if isinstance(key, int):
+            super().__setitem__(key, value)
+        else:
+            self._by_cluster[key] = value
+
+    def items(self):
+        return self._by_cluster.items()
+
+    def values(self):
+        return self._by_cluster.values()
+
+    def keys(self):
+        return self._by_cluster.keys()
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        return self._by_cluster.get(key, default)
+
+    def clear(self) -> None:
+        super().clear()
+        self._by_cluster.clear()
+
 
 class DecisionTreeExplainer:
     """Interpretable shallow Decision Tree Explainer for conformational clusters and states.
@@ -173,7 +243,7 @@ class DecisionTreeExplainer:
 
         # Model storage
         self.models: dict[Any, DecisionTreeClassifier] = {}
-        self.rules: dict[Any, list[DecisionRule]] = {}
+        self.rules: RuleStore = RuleStore({})
         self.feature_importances: dict[Any, pd.DataFrame] = {}
         self.feature_names: list[str] = []
         self.cluster_labels: list[Any] = []
@@ -296,6 +366,7 @@ class DecisionTreeExplainer:
             # Compute Gini feature importance & normalized scores
             self.feature_importances[cluster] = self._compute_feature_importance_df(clf, cluster)
 
+        self.rules = RuleStore(self.rules._by_cluster if isinstance(self.rules, RuleStore) else self.rules)
         self._fitted = True
         return self
 
@@ -377,6 +448,7 @@ class DecisionTreeExplainer:
         self.rules[state_a] = rules_a
         self.rules[state_b] = rules_b
         self.rules[pair_key] = rules_a + rules_b
+        self.rules = RuleStore(self.rules._by_cluster if isinstance(self.rules, RuleStore) else self.rules)
 
         imp_df = self._compute_feature_importance_df(clf, pair_str)
         self.feature_importances[pair_key] = imp_df
