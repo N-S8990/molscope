@@ -5,7 +5,7 @@ Start with the workflow you need. Current instructions and evidence are grouped 
 | Section | Read first |
 | --- | --- |
 | User guide | [Project runs](user-guide/project-runs.md), [CLI reference](user-guide/cli.md), [Study workspaces](user-guide/workspaces.md), [Input checks](user-guide/input-checks.md) |
-| Tutorials | [2RJY Villin Headpiece tutorial](tutorials/2rjy_villin_tutorial.md) |
+| Tutorials | [2RJY Villin Headpiece tutorial](tutorials/2rjy_villin_tutorial.ipynb) |
 | Large trajectories | [Chunked runs and limits](user-guide/scalable-runs.md) |
 | Environment | [Environment setup and verification](user-guide/environment.md) |
 | Scientific methods | [Feature library](scientific-methods/feature-library.md), [SAM-MFP specification](scientific-methods/sam-mfp.md), [ML validation](scientific-methods/ml-validation.md), [OpenMM simulation](scientific-methods/openmm-simulation-guide.md) |
