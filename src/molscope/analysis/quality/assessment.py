@@ -250,6 +250,8 @@ def assess_feature_quality(
     costs = _feature_costs(feature_costs, quality.index)
     quality["Measured_Cost_Seconds"] = costs
     quality["Cost_Status"] = np.where(costs.notna(), "measured", "not_provided")
+    quality["Max_Abs_Spearman"] = np.nan
+    quality["Uniqueness"] = np.nan
     frame_columns = quality.index[quality["Resolution"] == "frame"].tolist()
     if frame_columns:
         max_corr = _maximum_spearman_correlation(numeric[frame_columns], config.max_correlation_frames)
