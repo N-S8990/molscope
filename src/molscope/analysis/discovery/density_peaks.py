@@ -96,6 +96,12 @@ class DPAResult:
     training_coordinates: np.ndarray
     coordinate_columns: list[str]
 
+    @property
+    def state_populations(self) -> dict[int, int]:
+        """Mapping from cluster ID to frame count."""
+        counts = self.assignments["Cluster"].value_counts().to_dict()
+        return {int(k): int(v) for k, v in sorted(counts.items())}
+
     def predict(self, new_coordinates: pd.DataFrame | np.ndarray) -> np.ndarray:
         """Assign out-of-sample frames to the nearest cluster center in coordinate space.
 
