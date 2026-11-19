@@ -76,6 +76,14 @@ class OpenMMSimulationSpec:
     ph: float = 7.0
     keep_heterogens: bool = False
 
+    @property
+    def production_duration_ns(self) -> float:
+        return self.production_steps * self.timestep_femtoseconds / 1_000_000.0
+
+    @property
+    def save_interval_ps(self) -> float:
+        return self.report_interval_steps * self.timestep_femtoseconds / 1_000.0
+
 
 @dataclass(frozen=True)
 class ReplicaSpec:
@@ -143,6 +151,19 @@ class ProjectSpec:
                     if not replica.trajectory.is_file():
                         missing.append(str(replica.trajectory))
         return missing
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable dictionary representation of the ProjectSpec."""
+        def _to_json_compatible(obj: Any) -> Any:
+            if isinstance(obj, Path):
+                return str(obj)
+            if isinstance(obj, dict):
+                return {k: _to_json_compatible(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple)):
+                return [_to_json_compatible(v) for v in obj]
+            return obj
+
+        return _to_json_compatible(asdict(self))
 
 
 def _trajectory_metadata(
@@ -387,8 +408,8 @@ def load_project_spec(path: str | Path) -> ProjectSpec:
                 f"{context}.source must not be 'derived_state'. Candidate state labels are "
                 "reported separately and cannot be used as project predictive targets."
             )
-        if source_kind not in {"researcher_provided", "external_annotation"}:
-            raise ValueError(f"{context}.source must be researcher_provided or external_annotation.")
+        if source_kind not in {"researcher_provided", "external_annotation", "external_experimental", "user_study"}:
+            raise ValueError(f"{context}.source must be one of: researcher_provided, external_annotation, external_experimental, user_study.")
         assignments = raw_label.get("assignments")
         if not isinstance(assignments, dict) or not assignments:
             raise ValueError(f"{context}.assignments must be a non-empty object keyed by trajectory_id.")
