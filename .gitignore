@@ -10,6 +10,10 @@ __pycache__/
 build/
 dist/
 results/
+!results/
+results/*
+!results/README.md
+!results/.gitkeep
 cache/
 studies/
 !studies/
@@ -39,7 +43,13 @@ copilot-instructions.md
 # Jupyter checkpoints
 .ipynb_checkpoints/
 
-# Coverage and testing outputs
+# Data directories and large trajectories
+data/
+*.xtc
+*.dcd
+*.trr
+*.npz
+*.lock
 .coverage
 .coverage.*
 coverage.xml
